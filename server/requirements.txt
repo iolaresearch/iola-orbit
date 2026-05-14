@@ -1,0 +1,6 @@
+sgp4
+skyfield
+fastapi
+uvicorn
+httpx
+python-dotenv
