@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://orbit.ikirere.com", "https://iola-orbit.vercel.app"],
     allow_methods=["*"],
     allow_headers=["*"]
 )
