@@ -1,0 +1,30 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    background: black;
+}
+
+canvas {
+    display: block;
+}
+
+#ui {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    color: white;
+    font-family: Arial, sans-serif;
+    z-index: 100;
+}
+
+.panel {
+    background: rgba(0, 0, 0, 0.6);
+    padding: 15px;
+    border-radius: 10px;
+    width: 220px;
+    backdrop-filter: blur(10px);
+}
+
+h1 {
+    margin-bottom: 10px;
+}

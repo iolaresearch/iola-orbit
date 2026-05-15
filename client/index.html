@@ -3,20 +3,10 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <link rel="stylesheet" href="./styles.css">
 
     <title>IOLA Orbit</title>
 
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background: black;
-        }
-
-        canvas {
-            display: block;
-        }
-    </style>
     <script type="importmap">
     {
     "imports": {
@@ -27,7 +17,27 @@
     </script>
 </head>
 <body>
+<div id="ui">
 
+    <h1>IOLA Orbit</h1>
+
+    <div class="panel">
+        <p>
+            Satellites:
+            <span id="satellite-count">
+                Loading...
+            </span>
+        </p>
+
+        <p>
+            Status:
+            <span id="status">
+                Live
+            </span>
+        </p>
+    </div>
+
+</div>
 <script type="module">
 
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
@@ -56,11 +66,14 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.autorotate = true;
 controls.autoRotateSpeed = 0.5;
 
-// Earth
+// Earth texture, lightning and position
 const earthGeometry = new THREE.SphereGeometry(6.371, 64, 64);
+const textureLoader = new THREE.TextureLoader();
+const earthTexture = textureLoader.load(
+    "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg"
+);
 const earthMaterial = new THREE.MeshBasicMaterial({
-    color: 0x2233ff,
-    wireframe: true
+    map: earthTexture
 });
 
 const earth = new THREE.Mesh(
@@ -70,38 +83,138 @@ const earth = new THREE.Mesh(
 
 scene.add(earth);
 
-//Fetch Satellites
-const response = await fetch("http://127.0.0.1:8000/satellites");
-const satellites = await response.json();
+const atmosphereGeometry = new THREE.SphereGeometry(6.5, 64, 64);
+const atmosphereMaterial = new THREE.MeshBasicMaterial({
+    color: 0x3399ff,
+    transparent: true,
+    opacity: 0.5,
+    side: THREE.BackSide
+});
+const atmosphere = new THREE.Mesh(
+    atmosphereGeometry,
+    atmosphereMaterial
+);
+scene.add(atmosphere);
+
+const light = new THREE.PointLight(0xffffff, 2);
+light.position.set(20, 20, 20);
+scene.add(light);
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.05);
+scene.add(ambientLight);
+
+// starfield
+const starsGeometry = new THREE.BufferGeometry();
+const starsCount = 1000;
+const starsPositions = [];
+
+for (let i = 0; i < starsCount; i++) {
+    const x = (Math.random() - 0.5) * 2000;
+    const y = (Math.random() - 0.5) * 2000;
+    const z = (Math.random() - 0.5) * 2000;
+
+    starsPositions.push(x,y,z);
+}
+
+starsGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(starsPositions, 3)
+);
+
+const starsMaterial = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 0.15
+});
+
+const stars = new THREE.Points(
+    starsGeometry,
+    starsMaterial
+);
+
+scene.add(stars);
+
+
+
+//Load Satellites
+async function loadSatellites() {
+    const response = await fetch("http://127.0.0.1:8000/satellites");
+    return await response.json();
+}
+const satellites = await loadSatellites();
+document.getElementById(
+    "satellite-count"
+).innerText = satellites.length;
+
+setInterval(async () => {
+    const updatedSatellites = await loadSatellites();
+    const positions = satelliteGeometry.attributes.position.array;
+
+    for (let i = 0; i < updatedSatellites.length; i++) {
+        positions[i * 3] = updatedSatellites[i].x / 1000;
+        positions[i * 3 + 1] = updatedSatellites[i].y / 1000;
+        positions[i * 3 + 2] = updatedSatellites[i].z / 1000;
+    }
+    satelliteGeometry.attributes.position.needsUpdate = true;
+    console.log("satellites updated")
+}, 15000);
 
 // get set of satellites
-for (const satellite of satellites.slice(0, 100)) {
-    const satelliteGeometry = new THREE.SphereGeometry(0.03, 6, 6);
-    const satelliteMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff0000
-    });
+const satelliteGeometry = new THREE.BufferGeometry();
+const satellitePositions = [];
+for (const satellite of satellites.slice(0, 15000)) {
 
-    const satelliteMesh = new THREE.Mesh(
-        satelliteGeometry,
-        satelliteMaterial
+    satellitePositions.push(
+        satellite.x / 1000,
+        satellite.y / 1000,
+        satellite.z / 1000,
     );
+}
 
-    // scale down cooridnates
-    satelliteMesh.position.set(
-    satellite.x / 1000,
-    satellite.y / 1000,
-    satellite.z / 1000
-    );
-    scene.add(satelliteMesh);
-};
+satelliteGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(
+        satellitePositions,
+        3
+    )
+);
+
+const satelliteMaterial = new THREE.PointsMaterial({
+    color: 0xFFFF00,
+    size:0.05
+});
+
+const satellitePoints = new THREE.Points(
+    satelliteGeometry,
+    satelliteMaterial
+);
+
+scene.add(satellitePoints);
 
 // annimate loop
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
+
+    const positions = satelliteGeometry.attributes.position.array;
+    for (let i = 0; i < satellites.length; i++) {
+        positions[i * 3] += satellites[i].vx * 0.00001;
+        positions[i * 3 + 1] += satellites[i].vy * 0.00001;
+        positions[i * 3 + 2] += satellites[i].vz * 0.00001;
+    }
+    satelliteGeometry.attributes.position.needsUpdate = true;
+
+    earth.rotation.y += 0.0005;
+    atmosphere.rotation.y += 0.0005;
     renderer.render(scene, camera);
 }
 
+window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(
+        window.innerWidth,
+        window.innerHeight
+    );
+});
 animate(earth.rotation.y += 0.002);
 
 

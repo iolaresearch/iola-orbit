@@ -1,0 +1,84 @@
+Your intuition about orbital arcs
+
+Also yes:
+eventually you WILL precompute orbital trajectories.
+
+But that is for:
+
+orbit path visualization
+prediction overlays
+maneuver planning
+future pass estimation
+======================================
+Later:
+you’ll add:
+
+pagination
+filters
+orbital shells
+region queries
+binary transport
+websocket streaming
+======================================
+That API instinct is correct.
+
+Because what you’re actually building is not just:
+
+a visualization
+
+It’s:
+
+orbital state infrastructure
+
+And once IkirereMesh exists:
+the API becomes dramatically more valuable because it stops being:
+
+where are satellites?
+
+and becomes:
+
+what should satellites do?
+
+Huge difference.
+
+That’s where:
+
+collision prediction
+route optimization
+autonomous scheduling
+constellation coordination
+maneuver planning
+African orbital infrastructure tooling
+
+starts becoming real.
+
+And exposing a limited public API later is smart because:
+
+developers reveal unexpected use-cases
+universities experiment
+researchers integrate
+hobbyists build visualizations
+startups prototype on top
+
+Infrastructure companies often discover product direction from ecosystem behavior.
+====================
+telemetry overlays
+controls
+status panels
+filters
+object inspection -- clicking satelite to show full metadata in modal
+simulation controls
+hover labels
+satellite selection
+search
+filters by orbit class
+time controls
+pause/play
+orbital trails
+heatmaps
+Earth lighting
+Moon/Sun
+debris differentiation
+constellation grouping
+=================
+color code constellations

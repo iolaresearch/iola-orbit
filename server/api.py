@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from propagate import satellites
+from state import satellite_cache
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -12,4 +12,4 @@ app.add_middleware(
 
 @app.get("/satellites")
 def get_satellites():
-    return satellites
+    return satellite_cache
