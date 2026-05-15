@@ -136,7 +136,7 @@ scene.add(stars);
 
 //Load Satellites
 async function loadSatellites() {
-    const response = await fetch("http://127.0.0.1:8000/satellites");
+    const response = await fetch("https://iola-orbit-api.onrender.com/satellites");
     return await response.json();
 }
 const satellites = await loadSatellites();
