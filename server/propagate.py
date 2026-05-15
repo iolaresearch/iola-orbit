@@ -1,3 +1,4 @@
+import math
 from sgp4.api import Satrec, jday
 from datetime import datetime, timezone
 from state import satellite_cache
@@ -23,17 +24,38 @@ def propagate_satellites():
                 name = lines[i].strip()
                 tle_line1 = lines[i + 1].strip()
                 tle_line2 = lines[i + 2].strip()
+                norad_id = tle_line1[2:7].strip()
 
                 satellite = Satrec.twoline2rv(tle_line1, tle_line2)
 
                 error, position, velocity = satellite.sgp4(jd, fr)
 
                 if error == 0:
+                    altitude = (
+                        math.sqrt(
+                            position[0] ** 2 +
+                            position[1] ** 2 +
+                            position[2] ** 2
+                        ) - 6371
+                    )
+                    if altitude < 2000:
+                        orbit_class = "LEO"
+                    elif altitude < 35786:
+                        orbit_class = "MEO"
+                    else:
+                        orbit_class = "GEO"
+
                     satellite_data = {
                         "name": name,
+                        "norad_id": norad_id,
+
                         "x": position[0],
                         "y": position[1],
                         "z": position[2],
+
+                        "altitude": altitude,
+                        "orbital_class": orbit_class,
+                        
                         "vx": velocity[0],
                         "vy": velocity[1],
                         "vz": velocity[2]
