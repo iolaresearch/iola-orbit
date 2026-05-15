@@ -27,6 +27,8 @@ def validate_refreshed_tle_file(tle_data):
         return False
 
     for i in range(0, len(lines), 3):
+        if lines[i].startswith("1 ") or lines[i].startswith("2 "):
+            return False
         if not lines[i + 1].startswith("1 "):
             return False
         if not lines[i + 2].startswith("2 "):
@@ -55,6 +57,7 @@ def fetch_tle():
             "TLE refresh skipped: "
             "invalid TLE structure."
         )
+        return
 
     with open(TEMP_TLE_PATH, "w") as file:
         file.write(tle_data)
