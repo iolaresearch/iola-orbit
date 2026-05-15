@@ -9,7 +9,7 @@ MEO_MAX_ALTITUDE = 35786
 
 def propagate_satellites():
     with open("../data/active.tle", "r") as file:
-        lines = file.readlines()
+        lines = [l for l in file.readlines() if l.strip()]
         current_time = datetime.now(timezone.utc)
 
         jd, fr = jday(
