@@ -32,6 +32,3 @@ def fetch_tle():
         f"TLE catalog refreshed: "
         f"{satellite_count} satellites"
     )
-
-
-fetch_tle()

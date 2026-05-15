@@ -45,5 +45,3 @@ def propagate_satellites():
 
     satellite_cache.clear()
     satellite_cache.extend(satellites)
-
-propagate_satellites()
