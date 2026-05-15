@@ -136,13 +136,16 @@ scene.add(stars);
 
 //Load Satellites
 async function loadSatellites() {
-    const response = await fetch("https://iola-orbit.onrender.com");
+    const response = await fetch("https://iola-orbit.onrender.com/satellites");
     return await response.json();
 }
 const satellites = await loadSatellites();
 document.getElementById(
     "satellite-count"
 ).innerText = satellites.length;
+
+// get set of satellites
+const satelliteGeometry = new THREE.BufferGeometry();
 
 setInterval(async () => {
     const updatedSatellites = await loadSatellites();
@@ -156,9 +159,6 @@ setInterval(async () => {
     satelliteGeometry.attributes.position.needsUpdate = true;
     console.log("satellites updated")
 }, 15000);
-
-// get set of satellites
-const satelliteGeometry = new THREE.BufferGeometry();
 const satellitePositions = [];
 for (const satellite of satellites.slice(0, 15000)) {
 
