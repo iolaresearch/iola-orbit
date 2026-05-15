@@ -15,7 +15,7 @@ def tle_refresh_loop():
     while True:
         print("Refreshing TLE catalog...")
         fetch_tle()
-        time.sleep(7200)
+        time.sleep(7700)
 
 thread = threading.Thread(
     target=propagation_loop,
