@@ -99,8 +99,15 @@ const atmosphere = new THREE.Mesh(
 scene.add(atmosphere);
 
 const light = new THREE.DirectionalLight(0xffffff, 2);
-light.position.set(50, 20, 30);
+light.position.set(150, 60, 90);
 scene.add(light);
+
+const sun = new THREE.Mesh(
+    new THREE.SphereGeometry(1.5, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xFFFDE7 })
+);
+sun.position.set(150, 60, 90);
+scene.add(sun);
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.08);
 scene.add(ambientLight);
 
