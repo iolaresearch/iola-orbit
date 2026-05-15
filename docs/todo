@@ -19,6 +19,10 @@ orbital shells
 region queries
 binary transport
 websocket streaming
+add rate limiting
+add API keys
+expose public endpoints separately
+split internal/private telemetry routes
 ======================================
 That API instinct is correct.
 

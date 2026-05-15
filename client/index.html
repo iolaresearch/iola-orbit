@@ -4,9 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <link rel="stylesheet" href="./styles.css">
-
     <title>IOLA Orbit</title>
-
     <script type="importmap">
     {
     "imports": {
@@ -17,90 +15,87 @@
     </script>
 </head>
 <body>
+
+<img id="watermark" src="./iola-logo-space.png" alt="IOLA">
 <div id="ui">
-
-    <h1>IOLA Orbit</h1>
-
+    <div class="wordmark">IOLA ORBIT</div>
     <div class="panel">
-        <p>
-            Satellites:
-            <span id="satellite-count">
-                Loading...
-            </span>
-        </p>
-
-        <p>
-            Status:
-            <span id="status">
-                Live
-            </span>
-        </p>
+        <div class="stat-row">
+            <span class="label">TOTAL</span>
+            <span id="satellite-count">—</span>
+        </div>
+        <div class="stat-row">
+            <span class="label leo">LEO</span>
+            <span id="leo-count" class="leo">—</span>
+        </div>
+        <div class="stat-row">
+            <span class="label meo">MEO</span>
+            <span id="meo-count" class="meo">—</span>
+        </div>
+        <div class="stat-row">
+            <span class="label geo">GEO</span>
+            <span id="geo-count" class="geo">—</span>
+        </div>
+        <div class="divider"></div>
+        <div class="filters">
+            <button class="filter-btn leo active" data-class="LEO">LEO</button>
+            <button class="filter-btn meo active" data-class="MEO">MEO</button>
+            <button class="filter-btn geo active" data-class="GEO">GEO</button>
+        </div>
+        <div class="divider"></div>
+        <button id="pause-btn">PAUSE</button>
     </div>
-
 </div>
+
+<div id="inspector" class="hidden">
+    <div class="inspector-header">OBJECT</div>
+    <div id="inspector-name"></div>
+    <div class="divider"></div>
+    <div class="inspector-grid">
+        <span class="label">NORAD</span><span id="inspector-norad"></span>
+        <span class="label">CLASS</span><span id="inspector-class"></span>
+        <span class="label">ALT</span><span id="inspector-alt"></span>
+    </div>
+</div>
+
 <script type="module">
 
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
 
-// Scene
 const scene = new THREE.Scene();
 
-// Camera
-const camera = new THREE.PerspectiveCamera(
-    75,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1000
-);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.z = 20;
 
-// Renderer
-const renderer = new THREE.WebGLRenderer({
-    antialias: true
-});
-
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
+
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.autorotate = true;
 controls.autoRotateSpeed = 0.5;
 
-// Earth texture, lightning and position
-const earthGeometry = new THREE.SphereGeometry(6.371, 64, 64);
+// Earth
 const textureLoader = new THREE.TextureLoader();
-const earthTexture = textureLoader.load(
-    "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
-);
 const earthMaterial = new THREE.MeshPhongMaterial({
-    map: earthTexture,
+    map: textureLoader.load("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"),
     specular: new THREE.Color(0x222222),
     shininess: 12
 });
-
-const earth = new THREE.Mesh(
-    earthGeometry,
-    earthMaterial
-);
-
+const earth = new THREE.Mesh(new THREE.SphereGeometry(6.371, 64, 64), earthMaterial);
 scene.add(earth);
 
-const atmosphereGeometry = new THREE.SphereGeometry(6.5, 64, 64);
-const atmosphereMaterial = new THREE.MeshBasicMaterial({
-    color: 0x3399ff,
-    transparent: true,
-    opacity: 0.5,
-    side: THREE.BackSide
-});
 const atmosphere = new THREE.Mesh(
-    atmosphereGeometry,
-    atmosphereMaterial
+    new THREE.SphereGeometry(6.5, 64, 64),
+    new THREE.MeshBasicMaterial({ color: 0x3399ff, transparent: true, opacity: 0.08, side: THREE.BackSide })
 );
 scene.add(atmosphere);
 
+// Sun + light
 const light = new THREE.DirectionalLight(0xffffff, 2);
 light.position.set(150, 60, 90);
 scene.add(light);
+scene.add(new THREE.AmbientLight(0xffffff, 0.08));
 
 const sun = new THREE.Mesh(
     new THREE.SphereGeometry(1.5, 16, 16),
@@ -108,108 +103,129 @@ const sun = new THREE.Mesh(
 );
 sun.position.set(150, 60, 90);
 scene.add(sun);
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.08);
-scene.add(ambientLight);
 
-// starfield
-const starsGeometry = new THREE.BufferGeometry();
-const starsCount = 1000;
+// Starfield
 const starsPositions = [];
-
-for (let i = 0; i < starsCount; i++) {
-    const x = (Math.random() - 0.5) * 2000;
-    const y = (Math.random() - 0.5) * 2000;
-    const z = (Math.random() - 0.5) * 2000;
-
-    starsPositions.push(x,y,z);
+for (let i = 0; i < 1000; i++) {
+    starsPositions.push(
+        (Math.random() - 0.5) * 2000,
+        (Math.random() - 0.5) * 2000,
+        (Math.random() - 0.5) * 2000
+    );
 }
+const starsGeometry = new THREE.BufferGeometry();
+starsGeometry.setAttribute("position", new THREE.Float32BufferAttribute(starsPositions, 3));
+scene.add(new THREE.Points(starsGeometry, new THREE.PointsMaterial({ color: 0xffffff, size: 0.15 })));
 
-starsGeometry.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(starsPositions, 3)
-);
-
-const starsMaterial = new THREE.PointsMaterial({
-    color: 0xffffff,
-    size: 0.15
-});
-
-const stars = new THREE.Points(
-    starsGeometry,
-    starsMaterial
-);
-
-scene.add(stars);
-
-
-
-//Load Satellites
+// Satellites
 async function loadSatellites() {
     const response = await fetch("/api/satellites");
     return await response.json();
 }
+
 const satellites = await loadSatellites();
-document.getElementById(
-    "satellite-count"
-).innerText = satellites.length;
 
-// get set of satellites
-const satelliteGeometry = new THREE.BufferGeometry();
+const CLASS_COLORS = { LEO: 0x00ff88, MEO: 0x00bbff, GEO: 0xff6600 };
+const bySatelliteClass = { LEO: [], MEO: [], GEO: [] };
+for (const sat of satellites) bySatelliteClass[sat.orbital_class]?.push(sat);
 
-setInterval(async () => {
-    const updatedSatellites = await loadSatellites();
-    const positions = satelliteGeometry.attributes.position.array;
+document.getElementById("satellite-count").innerText = satellites.length;
+document.getElementById("leo-count").innerText = bySatelliteClass.LEO.length;
+document.getElementById("meo-count").innerText = bySatelliteClass.MEO.length;
+document.getElementById("geo-count").innerText = bySatelliteClass.GEO.length;
 
-    for (let i = 0; i < updatedSatellites.length; i++) {
-        positions[i * 3] = updatedSatellites[i].x / 1000;
-        positions[i * 3 + 1] = updatedSatellites[i].y / 1000;
-        positions[i * 3 + 2] = updatedSatellites[i].z / 1000;
+const classGeometries = {};
+const classPoints = {};
+
+for (const [cls, sats] of Object.entries(bySatelliteClass)) {
+    const pos = new Float32Array(sats.length * 3);
+    for (let i = 0; i < sats.length; i++) {
+        pos[i * 3]     = sats[i].x / 1000;
+        pos[i * 3 + 1] = sats[i].y / 1000;
+        pos[i * 3 + 2] = sats[i].z / 1000;
     }
-    satelliteGeometry.attributes.position.needsUpdate = true;
-    console.log("satellites updated")
-}, 15000);
-const satellitePositions = [];
-for (const satellite of satellites.slice(0, 15000)) {
-
-    satellitePositions.push(
-        satellite.x / 1000,
-        satellite.y / 1000,
-        satellite.z / 1000,
-    );
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: CLASS_COLORS[cls], size: 0.05 }));
+    scene.add(pts);
+    classGeometries[cls] = geo;
+    classPoints[cls] = pts;
 }
 
-satelliteGeometry.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(
-        satellitePositions,
-        3
-    )
-);
+// Refresh positions from API every 15s
+setInterval(async () => {
+    const fresh = await loadSatellites();
+    const freshByClass = { LEO: [], MEO: [], GEO: [] };
+    for (const sat of fresh) freshByClass[sat.orbital_class]?.push(sat);
+    for (const [cls, sats] of Object.entries(freshByClass)) {
+        const positions = classGeometries[cls].attributes.position.array;
+        for (let i = 0; i < sats.length; i++) {
+            positions[i * 3]     = sats[i].x / 1000;
+            positions[i * 3 + 1] = sats[i].y / 1000;
+            positions[i * 3 + 2] = sats[i].z / 1000;
+        }
+        classGeometries[cls].attributes.position.needsUpdate = true;
+        bySatelliteClass[cls] = sats;
+    }
+}, 15000);
 
-const satelliteMaterial = new THREE.PointsMaterial({
-    color: 0xFFFF00,
-    size:0.05
+// Filters
+document.querySelectorAll(".filter-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        btn.classList.toggle("active");
+        classPoints[btn.dataset.class].visible = btn.classList.contains("active");
+    });
 });
 
-const satellitePoints = new THREE.Points(
-    satelliteGeometry,
-    satelliteMaterial
-);
+// Pause
+let paused = false;
+document.getElementById("pause-btn").addEventListener("click", () => {
+    paused = !paused;
+    document.getElementById("pause-btn").innerText = paused ? "RESUME" : "PAUSE";
+});
 
-scene.add(satellitePoints);
+// Click to inspect
+const raycaster = new THREE.Raycaster();
+raycaster.params.Points.threshold = 0.15;
+const mouse = new THREE.Vector2();
 
-// annimate loop
+renderer.domElement.addEventListener("click", (e) => {
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    for (const [cls, pts] of Object.entries(classPoints)) {
+        if (!pts.visible) continue;
+        const hits = raycaster.intersectObject(pts);
+        if (hits.length > 0) {
+            const sat = bySatelliteClass[cls][hits[0].index];
+            document.getElementById("inspector-name").innerText = sat.name;
+            document.getElementById("inspector-norad").innerText = sat.norad_id;
+            document.getElementById("inspector-class").innerText = sat.orbital_class;
+            document.getElementById("inspector-alt").innerText = `${Math.round(sat.altitude)} km`;
+            document.getElementById("inspector").classList.remove("hidden");
+            return;
+        }
+    }
+    document.getElementById("inspector").classList.add("hidden");
+});
+
+// Animate
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
 
-    const positions = satelliteGeometry.attributes.position.array;
-    for (let i = 0; i < satellites.length; i++) {
-        positions[i * 3] += satellites[i].vx * 0.00001;
-        positions[i * 3 + 1] += satellites[i].vy * 0.00001;
-        positions[i * 3 + 2] += satellites[i].vz * 0.00001;
+    if (!paused) {
+        for (const [cls, sats] of Object.entries(bySatelliteClass)) {
+            const positions = classGeometries[cls].attributes.position.array;
+            for (let i = 0; i < sats.length; i++) {
+                positions[i * 3]     += sats[i].vx * 0.00001;
+                positions[i * 3 + 1] += sats[i].vy * 0.00001;
+                positions[i * 3 + 2] += sats[i].vz * 0.00001;
+            }
+            classGeometries[cls].attributes.position.needsUpdate = true;
+        }
     }
-    satelliteGeometry.attributes.position.needsUpdate = true;
 
     const earthAngle = (Date.now() / 86164100) * Math.PI * 2;
     earth.rotation.y = earthAngle;
@@ -220,15 +236,11 @@ function animate() {
 window.addEventListener("resize", () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(
-        window.innerWidth,
-        window.innerHeight
-    );
+    renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
 animate();
 
-
 </script>
-
 </body>
 </html>
