@@ -70,10 +70,12 @@ controls.autoRotateSpeed = 0.5;
 const earthGeometry = new THREE.SphereGeometry(6.371, 64, 64);
 const textureLoader = new THREE.TextureLoader();
 const earthTexture = textureLoader.load(
-    "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_atmos_2048.jpg"
+    "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
 );
-const earthMaterial = new THREE.MeshBasicMaterial({
-    map: earthTexture
+const earthMaterial = new THREE.MeshPhongMaterial({
+    map: earthTexture,
+    specular: new THREE.Color(0x222222),
+    shininess: 12
 });
 
 const earth = new THREE.Mesh(
@@ -96,10 +98,10 @@ const atmosphere = new THREE.Mesh(
 );
 scene.add(atmosphere);
 
-const light = new THREE.PointLight(0xffffff, 2);
-light.position.set(20, 20, 20);
+const light = new THREE.DirectionalLight(0xffffff, 2);
+light.position.set(50, 20, 30);
 scene.add(light);
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.05);
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.08);
 scene.add(ambientLight);
 
 // starfield
@@ -136,7 +138,7 @@ scene.add(stars);
 
 //Load Satellites
 async function loadSatellites() {
-    const response = await fetch("https://iola-orbit.onrender.com/satellites");
+    const response = await fetch("/api/satellites");
     return await response.json();
 }
 const satellites = await loadSatellites();
@@ -202,8 +204,9 @@ function animate() {
     }
     satelliteGeometry.attributes.position.needsUpdate = true;
 
-    earth.rotation.y += 0.0005;
-    atmosphere.rotation.y += 0.0005;
+    const earthAngle = (Date.now() / 86164100) * Math.PI * 2;
+    earth.rotation.y = earthAngle;
+    atmosphere.rotation.y = earthAngle;
     renderer.render(scene, camera);
 }
 
@@ -215,7 +218,7 @@ window.addEventListener("resize", () => {
         window.innerHeight
     );
 });
-animate(earth.rotation.y += 0.002);
+animate();
 
 
 </script>
