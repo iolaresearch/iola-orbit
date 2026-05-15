@@ -17,6 +17,9 @@ def tle_refresh_loop():
         fetch_tle()
         time.sleep(7700)
 
+fetch_tle()
+propagate_satellites()
+
 thread = threading.Thread(
     target=propagation_loop,
     daemon=True
