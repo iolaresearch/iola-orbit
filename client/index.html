@@ -136,6 +136,7 @@ document.getElementById("geo-count").innerText = bySatelliteClass.GEO.length;
 
 const classGeometries = {};
 const classPoints = {};
+const basePositions = {};
 
 for (const [cls, sats] of Object.entries(bySatelliteClass)) {
     const pos = new Float32Array(sats.length * 3);
@@ -144,6 +145,7 @@ for (const [cls, sats] of Object.entries(bySatelliteClass)) {
         pos[i * 3 + 1] = sats[i].y / 1000;
         pos[i * 3 + 2] = sats[i].z / 1000;
     }
+    basePositions[cls] = new Float32Array(pos);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: CLASS_COLORS[cls], size: 0.05 }));
@@ -152,21 +154,22 @@ for (const [cls, sats] of Object.entries(bySatelliteClass)) {
     classPoints[cls] = pts;
 }
 
-// Refresh positions from API every 15s
+let lastFetchTime = Date.now();
+
 setInterval(async () => {
     const fresh = await loadSatellites();
     const freshByClass = { LEO: [], MEO: [], GEO: [] };
     for (const sat of fresh) freshByClass[sat.orbital_class]?.push(sat);
     for (const [cls, sats] of Object.entries(freshByClass)) {
-        const positions = classGeometries[cls].attributes.position.array;
+        const base = basePositions[cls];
         for (let i = 0; i < sats.length; i++) {
-            positions[i * 3]     = sats[i].x / 1000;
-            positions[i * 3 + 1] = sats[i].y / 1000;
-            positions[i * 3 + 2] = sats[i].z / 1000;
+            base[i * 3]     = sats[i].x / 1000;
+            base[i * 3 + 1] = sats[i].y / 1000;
+            base[i * 3 + 2] = sats[i].z / 1000;
         }
-        classGeometries[cls].attributes.position.needsUpdate = true;
         bySatelliteClass[cls] = sats;
     }
+    lastFetchTime = Date.now();
 }, 15000);
 
 // Filters
@@ -184,21 +187,33 @@ document.getElementById("pause-btn").addEventListener("click", () => {
     document.getElementById("pause-btn").innerText = paused ? "RESUME" : "PAUSE";
 });
 
+// Selection highlight
+const selector = new THREE.Mesh(
+    new THREE.SphereGeometry(0.25, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, transparent: true, opacity: 0.6 })
+);
+selector.visible = false;
+scene.add(selector);
+let selectedCls = null, selectedIdx = null;
+
 // Click to inspect
 const raycaster = new THREE.Raycaster();
-raycaster.params.Points.threshold = 0.15;
 const mouse = new THREE.Vector2();
 
 renderer.domElement.addEventListener("click", (e) => {
     mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
+    raycaster.params.Points.threshold = camera.position.length() * 0.008;
 
     for (const [cls, pts] of Object.entries(classPoints)) {
         if (!pts.visible) continue;
         const hits = raycaster.intersectObject(pts);
         if (hits.length > 0) {
             const sat = bySatelliteClass[cls][hits[0].index];
+            selectedCls = cls;
+            selectedIdx = hits[0].index;
+            selector.visible = true;
             document.getElementById("inspector-name").innerText = sat.name;
             document.getElementById("inspector-norad").innerText = sat.norad_id;
             document.getElementById("inspector-class").innerText = sat.orbital_class;
@@ -207,6 +222,8 @@ renderer.domElement.addEventListener("click", (e) => {
             return;
         }
     }
+    selectedCls = null;
+    selector.visible = false;
     document.getElementById("inspector").classList.add("hidden");
 });
 
@@ -216,15 +233,29 @@ function animate() {
     controls.update();
 
     if (!paused) {
+        const elapsed = (Date.now() - lastFetchTime) / 1000;
         for (const [cls, sats] of Object.entries(bySatelliteClass)) {
             const positions = classGeometries[cls].attributes.position.array;
+            const base = basePositions[cls];
             for (let i = 0; i < sats.length; i++) {
-                positions[i * 3]     += sats[i].vx * 0.00001;
-                positions[i * 3 + 1] += sats[i].vy * 0.00001;
-                positions[i * 3 + 2] += sats[i].vz * 0.00001;
+                positions[i * 3]     = base[i * 3]     + sats[i].vx * elapsed / 1000;
+                positions[i * 3 + 1] = base[i * 3 + 1] + sats[i].vy * elapsed / 1000;
+                positions[i * 3 + 2] = base[i * 3 + 2] + sats[i].vz * elapsed / 1000;
             }
             classGeometries[cls].attributes.position.needsUpdate = true;
         }
+    }
+
+    if (selectedCls !== null) {
+        const elapsed = (Date.now() - lastFetchTime) / 1000;
+        const sat = bySatelliteClass[selectedCls][selectedIdx];
+        const base = basePositions[selectedCls];
+        const i = selectedIdx;
+        selector.position.set(
+            base[i * 3]     + sat.vx * elapsed / 1000,
+            base[i * 3 + 1] + sat.vy * elapsed / 1000,
+            base[i * 3 + 2] + sat.vz * elapsed / 1000
+        );
     }
 
     const earthAngle = (Date.now() / 86164100) * Math.PI * 2;
