@@ -1,0 +1,85 @@
+PHASE 1 — Orbital Propagation & Simulation Infrastructure
+
+Core Direction:
+Build the foundational orbital state engine capable of ingesting, propagating, synchronizing, and visualizing real-world satellite behavior deterministically.
+
+Includes:
+- orbital propagation
+- telemetry ingestion
+- live orbital state synchronization
+- Earth-centered coordinate systems
+- real-time constellation rendering
+- orbital classification
+- backend/frontend synchronization
+- propagation infrastructure
+- operational telemetry flow
+
+From the roadmap:
+- orbital simulation engine
+- telemetry pipeline
+- mission design foundations
+- real-time satellite state propagation
+- orbital visualization infrastructure
+- propagation validation against live orbital datasets
+- synchronized simulation architecture
+
+Mathematical / Physics Foundations:
+- Cartesian orbital coordinate systems
+- Earth-centered inertial positioning
+- Euclidean distance in 3D space
+- relative displacement vectors
+- relative velocity vectors
+- orbital state propagation
+- SGP4 orbital mechanics
+- TLE orbital element interpretation
+- temporal state evolution
+- orbital shell classification
+- deterministic state synchronization
+
+Operational Systems:
+- live TLE ingestion pipeline
+- defensive telemetry validation
+- staged file ingestion architecture
+- atomic orbital catalog replacement
+- propagation cache synchronization
+- orbital state persistence
+- satellite metadata infrastructure
+- altitude estimation
+- orbital regime classification
+- frontend telemetry rendering
+- constellation visualization
+- simulation timing loops
+- orbital update scheduling
+- production deployment infrastructure
+- operational telemetry APIs
+
+Infrastructure & Reliability Systems:
+- cooldown-aware ingestion
+- malformed telemetry rejection
+- last-known-good state preservation
+- propagation fault tolerance
+- cache protection semantics
+- deployment-safe orchestration
+- CORS security configuration
+- production telemetry hosting
+- subdomain deployment
+- operational API exposure
+
+Visualization Systems:
+- Earth rendering
+- orbital shell visualization
+- real-time satellite rendering
+- constellation movement simulation
+- orbital scaling systems
+- starfield rendering
+- telemetry overlays
+- orbital interaction controls
+- frontend operational dashboards
+
+Key Outcome:
+The system evolves from static orbital visualization into a live operational orbital state engine capable of ingesting, propagating, synchronizing, and rendering real-world satellite behavior continuously and reliably.
+
+Phase 1 answers:
+“Where are the satellites right now?”
+
+This becomes the deterministic foundation all future orbital intelligence and autonomous coordination systems depend on.
