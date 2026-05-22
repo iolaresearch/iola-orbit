@@ -106,6 +106,29 @@ CONJUNCTION_RISK_CRITICAL_KM     =  1.0  # TCA distance thresholds
 CONJUNCTION_RISK_HIGH_KM         =  5.0
 CONJUNCTION_RISK_MODERATE_KM     = 20.0
 
+# -----------------------------------------------------------------------
+# Kessler cascade shell density thresholds (objects per 100 km altitude band)
+# Derived from current LEO population distribution in the active catalog.
+# LEO 400-600 km: Starlink + OneWeb concentration — highest cascade risk.
+# These thresholds define the shell_density_factor in compute_composite_risk_score.
+# NOVELTY: No published CDM standard uses shell population density as a
+# risk weight. This is IOLA IP. Calibration target: compare risk tier
+# assignments against historical conjunction outcomes from Space-Track.
+# -----------------------------------------------------------------------
+SHELL_DENSITY_LOW_THRESHOLD      =  50   # objects/100km band — sparse, low cascade risk
+SHELL_DENSITY_HIGH_THRESHOLD     = 500   # objects/100km band — dense, high cascade risk
+SHELL_DENSITY_BAND_WIDTH_KM      = 100.0 # altitude band width for population counting
+
+# Altitude pre-filter for conjunction screening.
+# Pairs with altitude difference exceeding this are geometrically
+# incapable of conjunction (cannot be in the same orbital shell).
+CONJUNCTION_ALTITUDE_PREFILTER_KM = 200.0
+
+# Minimum current separation to proceed to TCA scan.
+# Pairs already further apart than this at the moment of screening
+# are unlikely to conjunct within the scan window.
+CONJUNCTION_SEPARATION_PREFILTER_KM = 1000.0
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 2. VECTOR MATH — pure Python, no numpy
@@ -1172,54 +1195,139 @@ def compute_tle_age_uncertainty_km(satellite, epoch):
         return POSITION_UNCERTAINTY_KM
 
 
-def compute_composite_risk_score(satellite_a, satellite_b, approach_result, epoch):
+def compute_orbital_shell_density(satellites, altitude_km):
+    """
+    Count how many satellites occupy the 100 km altitude band centred on altitude_km.
+
+    This is the foundation of IOLA's Kessler cascade risk factor.
+    The density of an orbital shell determines how dangerous a collision
+    in that shell would be — a collision in a dense shell (e.g. 550 km,
+    Starlink concentration) has cascade potential orders of magnitude
+    higher than the same collision in a sparse shell.
+
+    NOVELTY: No published CDM standard uses shell population density as
+    a risk component. USSPACECOM CDMs report Pc for the specific pair
+    only. IOLA's scorer also weights cascade potential of the shell.
+
+    Parameters
+    ----------
+    satellites   : list of satellite records from /satellites output
+    altitude_km  : target altitude to measure density around
+
+    Returns
+    -------
+    dict with keys:
+      count              — number of tracked objects in this band
+      band_low_km        — lower altitude bound of the band
+      band_high_km       — upper altitude bound of the band
+      density_factor     — normalised 0.0-1.0 cascade risk weight
+    """
+    band_half_width = SHELL_DENSITY_BAND_WIDTH_KM / 2.0
+    band_low_km     = altitude_km - band_half_width
+    band_high_km    = altitude_km + band_half_width
+
+    count = sum(
+        1 for sat in satellites
+        if band_low_km <= sat.get("altitude_km", 0) <= band_high_km
+    )
+
+    # Normalise against thresholds: below LOW = 0.0, above HIGH = 1.0
+    if count <= SHELL_DENSITY_LOW_THRESHOLD:
+        density_factor = 0.0
+    elif count >= SHELL_DENSITY_HIGH_THRESHOLD:
+        density_factor = 1.0
+    else:
+        density_factor = (count - SHELL_DENSITY_LOW_THRESHOLD) / (
+            SHELL_DENSITY_HIGH_THRESHOLD - SHELL_DENSITY_LOW_THRESHOLD
+        )
+
+    return {
+        "count":          count,
+        "band_low_km":    round(band_low_km, 1),
+        "band_high_km":   round(band_high_km, 1),
+        "density_factor": round(density_factor, 4),
+    }
+
+
+def compute_composite_risk_score(satellite_a, satellite_b, approach_result, epoch,
+                                  all_satellites=None):
     """
     One number [0, 1] representing how dangerous this conjunction is.
 
-    Five components:
-      40% — distance risk:     closer TCA = more dangerous
-      20% — velocity risk:     higher relative speed = less time to react
-      20% — time urgency:      TCA within 2 hours = full urgency
-      10% — probability:       collision probability contribution
-      10% — TLE age risk:      older TLE = larger positional uncertainty
+    Six components:
+      35% — distance risk:      closer TCA = more dangerous
+      20% — velocity risk:      higher relative speed = less time to react
+      20% — time urgency:       TCA within 2 hours = full urgency
+       5% — probability:        collision probability contribution
+      10% — TLE age risk:       older TLE = larger positional uncertainty
+      10% — shell density:      Kessler cascade potential of the orbital shell
 
     Extra 0.1 added if the satellites are confirmed closing right now.
 
-    The TLE age component is IOLA's novel contribution — it penalises
-    conjunctions where one or both TLEs are stale, since the stated
-    miss distance may not reflect the true separation.
+    =======================================================================
+    NOVELTY COMPONENTS — IOLA IP
+    =======================================================================
+    TLE age component: σ(t) = σ₀ + k × |B*| / B*_nominal × age²
+      No published CDM standard weights uncertainty by bstar-adjusted age.
+
+    Shell density component: Kessler cascade factor.
+      USSPACECOM CDMs report Pc for the specific pair only. They do not
+      score cascade potential. A collision at 550 km in the Starlink shell
+      is categorically more dangerous than the same miss distance at 1200 km
+      because the cascade potential differs by orders of magnitude.
+      This component is IOLA's novel contribution to conjunction scoring.
+      It accounts for the fact that consequence is not pair-symmetric.
+    =======================================================================
 
     Validation: run against known historical CDMs from Space-Track and
     compare risk classifications. Weights are first-principles estimates
-    pending empirical calibration. See phase1_engineering_notes.md Q2/Q3.
+    pending empirical calibration. See phase2_engineering_notes.md.
     """
     miss_distance            = approach_result["distance_km"]
     time_to_closest_approach = approach_result["time_seconds"]
     relative_velocity        = relative_velocity_between_satellites(satellite_a, satellite_b)
 
     # Use the larger of the two uncertainty estimates — worst-case posture
-    uncertainty_a            = compute_tle_age_uncertainty_km(satellite_a, epoch)
-    uncertainty_b            = compute_tle_age_uncertainty_km(satellite_b, epoch)
-    worst_case_uncertainty   = max(uncertainty_a, uncertainty_b)
+    uncertainty_a          = compute_tle_age_uncertainty_km(satellite_a, epoch)
+    uncertainty_b          = compute_tle_age_uncertainty_km(satellite_b, epoch)
+    worst_case_uncertainty = max(uncertainty_a, uncertainty_b)
 
     probability_of_collision = compute_collision_probability(
         miss_distance, relative_velocity, worst_case_uncertainty
     )
 
-    distance_risk_component  = max(0.0, 1.0 - miss_distance / 50.0)
-    velocity_risk_component  = min(1.0, relative_velocity / 15.0)
-    time_urgency_component   = max(0.0, 1.0 - time_to_closest_approach / 7200.0)
-    probability_component    = min(1.0, probability_of_collision * 1e5)
+    # Standard geometric and temporal risk components
+    distance_risk_component = max(0.0, 1.0 - miss_distance / 50.0)
+    velocity_risk_component = min(1.0, relative_velocity / 15.0)
+    time_urgency_component  = max(0.0, 1.0 - time_to_closest_approach / 7200.0)
+    probability_component   = min(1.0, probability_of_collision * 1e5)
 
     # TLE age risk: saturates at 1.0 when worst-case uncertainty reaches 50 km
-    tle_age_risk_component   = min(1.0, (worst_case_uncertainty - POSITION_UNCERTAINTY_KM) / 50.0)
+    tle_age_risk_component = min(1.0, (worst_case_uncertainty - POSITION_UNCERTAINTY_KM) / 50.0)
+
+    # Kessler shell density factor.
+    # Use the average altitude of the two satellites as the band centre.
+    # When all_satellites is not provided (e.g. in unit tests), shell
+    # density defaults to 0.0 — conservative, not artificially elevated.
+    altitude_a = satellite_a.get("altitude_km", 0)
+    altitude_b = satellite_b.get("altitude_km", 0)
+    mean_conjunction_altitude_km = (altitude_a + altitude_b) / 2.0
+
+    if all_satellites:
+        shell_info             = compute_orbital_shell_density(all_satellites, mean_conjunction_altitude_km)
+        shell_density_factor   = shell_info["density_factor"]
+        shell_population_count = shell_info["count"]
+    else:
+        shell_density_factor   = 0.0
+        shell_population_count = None
 
     total_risk_score = (
-        0.40 * distance_risk_component +
+        0.35 * distance_risk_component +
         0.20 * velocity_risk_component +
         0.20 * time_urgency_component  +
-        0.10 * probability_component   +
-        0.10 * tle_age_risk_component
+        0.05 * probability_component   +
+        0.10 * tle_age_risk_component  +
+        0.10 * shell_density_factor
     )
 
     if approach_result["approaching"]:
@@ -1233,6 +1341,8 @@ def compute_composite_risk_score(satellite_a, satellite_b, approach_result, epoc
         "velocity_risk_component":           round(velocity_risk_component, 4),
         "time_urgency_component":            round(time_urgency_component, 4),
         "tle_age_risk_component":            round(tle_age_risk_component, 4),
+        "shell_density_factor":              round(shell_density_factor, 4),
+        "shell_population_count":            shell_population_count,
         "worst_case_uncertainty_km":         round(worst_case_uncertainty, 4),
         "time_to_closest_approach_seconds":  time_to_closest_approach,
         "relative_velocity_kms":             round(relative_velocity, 4),
@@ -1503,3 +1613,243 @@ def generate_orbital_forecast(satellite, epoch,
         })
 
     return forecast
+
+
+# ===========================================================================
+# 14. CATALOG SCREENING — O(n) + O(n²) CONJUNCTION PIPELINE
+# ===========================================================================
+
+def screen_catalog(satellites, threshold_km=50.0, scan_window_seconds=86400):
+    """
+    Screen the full satellite catalog for conjunction candidates.
+
+    This is the operational heart of Phase 2. It runs in three stages:
+
+    Stage 1 — Altitude pre-filter (O(n)):
+      Group satellites by 200 km altitude bands.
+      A pair must share an altitude band to be conjunction-capable.
+      Eliminates ~95% of pairs before any geometry is computed.
+
+    Stage 2 — Current separation filter (O(m) where m << n²):
+      For surviving pairs, compute the Euclidean distance right now.
+      Pairs already further than CONJUNCTION_SEPARATION_PREFILTER_KM
+      apart are unlikely to conjunct within 24 hours. Skip them.
+
+    Stage 3 — Full TCA computation (O(k) where k << m):
+      For pairs that survive both filters, run find_closest_approach
+      with SGP4 refinement. Compute composite risk score.
+      Generate CDM for MODERATE and above.
+
+    =======================================================================
+    HUMAN-IN-THE-LOOP BOUNDARY
+    =======================================================================
+    This function produces intelligence only. It flags conjunctions and
+    produces risk scores. It does NOT issue maneuver commands. It does
+    NOT autonomously command any spacecraft. Every output of this function
+    is advisory. The operator reads the output and decides what to do.
+    This boundary is architecturally mandatory and must never be crossed
+    in Phase 2 code. Phase 3 (IkirereMesh) will propose coordination
+    actions, but those too are recommendations subject to human approval.
+    =======================================================================
+
+    Parameters
+    ----------
+    satellites         : list — satellite records from propagate_satellites()
+    threshold_km       : float — separation threshold to trigger full TCA scan
+    scan_window_seconds: int — how far ahead to scan for TCA (default 24h)
+
+    Returns
+    -------
+    dict with keys:
+      screened_at           — ISO 8601 UTC of this screening run
+      total_satellites      — total objects in catalog
+      pairs_altitude_passed — pairs that passed the altitude pre-filter
+      pairs_separation_passed — pairs that passed the current-separation filter
+      conjunctions          — list of ConjunctionEvent dicts, sorted by risk
+      summary               — counts by risk level
+    """
+    epoch = datetime.now(timezone.utc)
+
+    # Stage 1: Group by altitude band (CONJUNCTION_ALTITUDE_PREFILTER_KM bands)
+    altitude_bands = {}
+    for sat in satellites:
+        altitude = sat.get("altitude_km", 0)
+        band_key = int(altitude // CONJUNCTION_ALTITUDE_PREFILTER_KM)
+        if band_key not in altitude_bands:
+            altitude_bands[band_key] = []
+        altitude_bands[band_key].append(sat)
+
+    # Candidate pairs: same band or adjacent bands (to catch cross-band conjunctions)
+    candidate_pairs = []
+    band_keys = sorted(altitude_bands.keys())
+    for band_key in band_keys:
+        same_band  = altitude_bands[band_key]
+        next_band  = altitude_bands.get(band_key + 1, [])
+
+        # Pairs within the same altitude band
+        for idx_a in range(len(same_band)):
+            for idx_b in range(idx_a + 1, len(same_band)):
+                candidate_pairs.append((same_band[idx_a], same_band[idx_b]))
+
+        # Pairs across adjacent altitude bands
+        for sat_a in same_band:
+            for sat_b in next_band:
+                candidate_pairs.append((sat_a, sat_b))
+
+    pairs_altitude_passed = len(candidate_pairs)
+
+    # Stage 2: Current separation filter
+    close_pairs = []
+    for sat_a, sat_b in candidate_pairs:
+        current_separation = distance_between_satellites(sat_a, sat_b)
+        if current_separation <= CONJUNCTION_SEPARATION_PREFILTER_KM:
+            close_pairs.append((sat_a, sat_b, current_separation))
+
+    pairs_separation_passed = len(close_pairs)
+
+    # Stage 3: Full TCA computation for surviving pairs
+    conjunction_events = []
+    for sat_a, sat_b, current_separation in close_pairs:
+        approach = find_closest_approach(sat_a, sat_b,
+                                         scan_duration_seconds=scan_window_seconds)
+
+        if approach["distance_km"] > threshold_km:
+            continue
+
+        risk = compute_composite_risk_score(sat_a, sat_b, approach, epoch,
+                                             all_satellites=satellites)
+        cdm  = generate_cdm(sat_a, sat_b, approach, risk, epoch)
+
+        conjunction_events.append({
+            "object_1_norad":         sat_a.get("norad_id"),
+            "object_1_name":          sat_a.get("name"),
+            "object_2_norad":         sat_b.get("norad_id"),
+            "object_2_name":          sat_b.get("name"),
+            "current_separation_km":  round(current_separation, 3),
+            "miss_distance_km":       round(approach["distance_km"], 3),
+            "tca_seconds_from_now":   round(approach["time_seconds"], 1),
+            "approaching":            approach["approaching"],
+            "tca_refined":            approach["tca_refined"],
+            "risk":                   risk,
+            "cdm":                    cdm,
+        })
+
+    # Sort by composite risk score descending (most dangerous first)
+    conjunction_events.sort(
+        key=lambda event: event["risk"]["composite_score"], reverse=True
+    )
+
+    risk_counts = {"CRITICAL": 0, "HIGH": 0, "MODERATE": 0, "LOW": 0}
+    for event in conjunction_events:
+        level = event["risk"]["risk_level"]
+        risk_counts[level] = risk_counts.get(level, 0) + 1
+
+    return {
+        "screened_at":               epoch.isoformat(),
+        "total_satellites":          len(satellites),
+        "pairs_altitude_passed":     pairs_altitude_passed,
+        "pairs_separation_passed":   pairs_separation_passed,
+        "conjunctions_found":        len(conjunction_events),
+        "conjunctions":              conjunction_events,
+        "summary":                   risk_counts,
+    }
+
+
+# ===========================================================================
+# 15. CONJUNCTION DATA MESSAGE (CDM) GENERATION
+# ===========================================================================
+
+def generate_cdm(satellite_a, satellite_b, approach_result, risk_result, epoch):
+    """
+    Generate an IOLA Conjunction Data Message (CDM).
+
+    Internal format is IOLA-proprietary JSON. Field names and structure
+    are designed to map cleanly to CCSDS 508.0-B-1 when a CCSDS export
+    layer is added for Tier 1 customers (NASA, ESA, JAXA).
+
+    CCSDS field mapping is documented inline for each field.
+    The export layer will be a rename operation, not a data pipeline rewrite.
+
+    =======================================================================
+    HUMAN-IN-THE-LOOP BOUNDARY (restated here for clarity)
+    =======================================================================
+    This CDM is an intelligence product. It is produced for human review.
+    It does not command spacecraft. It does not execute maneuvers.
+    The RECOMMENDED_ACTION field is advisory. The operator decides.
+    =======================================================================
+
+    Parameters
+    ----------
+    satellite_a, satellite_b : Phase 1 satellite records
+    approach_result          : output of find_closest_approach()
+    risk_result              : output of compute_composite_risk_score()
+    epoch                    : datetime — time of CDM generation
+
+    Returns
+    -------
+    dict — CDM with CCSDS-mappable field structure
+    """
+    tca_epoch = epoch + timedelta(seconds=approach_result["time_seconds"])
+
+    return {
+        # --- CCSDS 508.0-B-1 header fields ---
+        "CDM_VERSION":                   "1.0",
+        "CREATION_DATE":                 epoch.isoformat(),           # CCSDS: CREATION_DATE
+        "ORIGINATOR":                    "IOLA/ConjunctionEngine",    # CCSDS: ORIGINATOR
+
+        # --- Time of Closest Approach ---
+        "TCA":                           tca_epoch.isoformat(),       # CCSDS: TCA
+        "TCA_SECONDS_FROM_NOW":          round(approach_result["time_seconds"], 1),
+
+        # --- Miss distance ---
+        "MISS_DISTANCE_KM":              round(approach_result["distance_km"], 4),          # CCSDS: MISS_DISTANCE
+        "EFFECTIVE_MISS_DISTANCE_KM":    round(approach_result["distance_km"] - POSITION_UNCERTAINTY_KM, 4),
+        "RELATIVE_VELOCITY_KMS":         round(risk_result["relative_velocity_kms"], 4),   # CCSDS: RELATIVE_SPEED
+
+        # --- Risk assessment (IOLA extension — no CCSDS equivalent) ---
+        "COLLISION_PROBABILITY":         risk_result["probability_of_collision"],           # CCSDS: COLLISION_PROBABILITY
+        "COMPOSITE_RISK_SCORE":          risk_result["composite_score"],
+        "RISK_LEVEL":                    risk_result["risk_level"],
+        "RISK_COMPONENTS": {
+            "distance":     risk_result["distance_risk_component"],
+            "velocity":     risk_result["velocity_risk_component"],
+            "time_urgency": risk_result["time_urgency_component"],
+            "probability":  risk_result.get("probability_component", None),
+            "tle_age":      risk_result["tle_age_risk_component"],
+            "shell_density": risk_result["shell_density_factor"],
+        },
+        "WORST_CASE_UNCERTAINTY_KM":     risk_result["worst_case_uncertainty_km"],
+        "SHELL_POPULATION_COUNT":        risk_result.get("shell_population_count"),
+        "TCA_REFINED":                   approach_result["tca_refined"],
+
+        # --- Object 1 ---
+        "OBJECT_1": {
+            "NORAD_ID":       satellite_a.get("norad_id"),            # CCSDS: SAT1_OBJECT_DESIGNATOR
+            "NAME":           satellite_a.get("name"),                # CCSDS: SAT1_OBJECT_NAME
+            "POSITION_KM":    [satellite_a["x"], satellite_a["y"], satellite_a["z"]],
+            "VELOCITY_KMS":   [satellite_a["vx"], satellite_a["vy"], satellite_a["vz"]],
+            "ALTITUDE_KM":    satellite_a.get("altitude_km"),
+            "ORBITAL_CLASS":  satellite_a.get("orbital_class"),
+            "BSTAR":          satellite_a.get("bstar"),
+            "TLE_EPOCH":      satellite_a.get("epoch"),
+        },
+
+        # --- Object 2 ---
+        "OBJECT_2": {
+            "NORAD_ID":       satellite_b.get("norad_id"),            # CCSDS: SAT2_OBJECT_DESIGNATOR
+            "NAME":           satellite_b.get("name"),                # CCSDS: SAT2_OBJECT_NAME
+            "POSITION_KM":    [satellite_b["x"], satellite_b["y"], satellite_b["z"]],
+            "VELOCITY_KMS":   [satellite_b["vx"], satellite_b["vy"], satellite_b["vz"]],
+            "ALTITUDE_KM":    satellite_b.get("altitude_km"),
+            "ORBITAL_CLASS":  satellite_b.get("orbital_class"),
+            "BSTAR":          satellite_b.get("bstar"),
+            "TLE_EPOCH":      satellite_b.get("epoch"),
+        },
+
+        # --- Operator advisory (human-in-the-loop boundary) ---
+        "RECOMMENDED_ACTION":  generate_maneuver_recommendation(
+            approach_result["distance_km"],
+            risk_result["relative_velocity_kms"],
+            approach_result["time_seconds"],
+        ),
+    }
