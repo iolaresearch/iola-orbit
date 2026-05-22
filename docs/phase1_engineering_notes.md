@@ -1529,6 +1529,70 @@ The catalog lags reality. CelesTrak updates the active catalog from USSPACECOM t
 
 ---
 
+---
+
+## 22. Parsing vs. Evaluation — Performance Profile
+
+*Written: 2026-05-22 · Jason Quist + Claude*
+
+This section records the measured performance characteristics of the two distinct computational phases in the orbital pipeline. These numbers were the empirical basis for the on-demand propagation architecture decision (Section 20).
+
+### Measurements (local Python 3.11, Windows, 15,428 satellites)
+
+| Operation | Time | Per satellite |
+|---|---|---|
+| `Satrec.twoline2rv` × 15,428 (parsing) | **69 ms** | 0.0045 ms |
+| `satrec.sgp4` × 15,428 (evaluation) | **8 ms** | 0.0005 ms |
+| Ratio | parsing is **8.4× slower** | — |
+
+On Render's free tier (Linux, C extension optimised): evaluation measured at **9 ms** for the full catalog.
+
+### What each operation does
+
+**Parsing — `Satrec.twoline2rv(tle_line1, tle_line2)`**
+
+Takes two lines of raw TLE text and converts them into a numeric Satrec structure. This involves:
+- Parsing every fixed-width character field (NORAD ID, epoch, mean motion, eccentricity, inclination, RAAN, argument of perigee, mean anomaly, B* drag term)
+- Converting from the TLE's mean-motion representation back to semi-major axis
+- Solving Kepler's equation to convert mean anomaly to eccentric anomaly
+- Computing the initial secular perturbation rates (J2, J4, atmospheric drag) that will be applied at evaluation time
+
+This is CPU-intensive string parsing and trigonometric computation. It produces a data structure that describes the orbit's shape and orientation — but not yet a position.
+
+**Evaluation — `satrec.sgp4(julian_date, julian_date_fraction)`**
+
+Takes a pre-built Satrec and a time, and returns the satellite's ECI position and velocity at that moment. This involves:
+- Advancing the mean anomaly by `mean_motion × elapsed_time`
+- Applying the pre-computed secular perturbation corrections
+- Applying periodic perturbation corrections (short-period and long-period terms)
+- Converting from orbital elements to ECI Cartesian coordinates
+
+This is pure numerical evaluation on pre-built data. No string parsing, no trigonometric setup. The dominant cost is the perturbation mathematics.
+
+### Why this ratio shaped the architecture
+
+The 8:1 ratio between parsing and evaluation is the direct justification for caching parsed Satrec objects in `state.satrec_catalog`. The catalog changes every 2 hours (one TLE refresh). Positions are requested on every GET /satellites call.
+
+If parsing were repeated per request: 69 ms per request.
+With cached Satrec objects: 8 ms per request.
+
+More importantly: the cost that was previously paid every 15 seconds (background cache refresh) is now paid only every 2 hours (catalog refresh). The evaluation cost — the only remaining per-request cost — is 8 ms. This is below the perceptible threshold for an API response and smaller than typical HTTP overhead.
+
+### Frontend independence
+
+The frontend does not use the backend `/satellites` endpoint. It calls `/tles` via the Vercel proxy, receives raw TLE text (~1 MB), and performs its own satellite.js SGP4 evaluation in a Web Worker.
+
+The frontend's propagation cycle is completely independent:
+- On page load: fetch `/tles` once, parse + evaluate in the Worker
+- Worker propagates to `new Date()` every 1 second
+- On browser refresh: re-fetch `/tles` (1 HTTP call), restart Worker cycle
+
+Since TLEs change only every 2 hours, browser refreshes within that window re-fetch identical data. The cost is one ~1MB HTTP transfer plus the Worker's 69ms parse time — invisible to the user.
+
+The two propagation paths (backend on-demand for research consumers, frontend Worker for visualisation) remain architecturally independent by design and serve different consumers. Neither change in this session affected the other.
+
+---
+
 *Document last updated: 2026-05-22*  
 *Signed: Jason Quist (Founder & CEO) · Claude (Chief Research Scientist / Systems Architect)*  
 *Next update: After Render redeploys and Test 1 re-run confirms < 3 km delta with on-demand propagation.*
