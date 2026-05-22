@@ -97,8 +97,8 @@ def get_propagated_satellite_state():
 
 @app.get("/conjunction/screen")
 def screen_for_conjunctions(
-    threshold_km:    float = Query(default=50.0,   description="Separation threshold to trigger TCA scan (km)"),
-    window_hours:    float = Query(default=24.0,   description="Look-ahead window for TCA computation (hours)"),
+    threshold_km:    float = Query(default=50.0,   description="Miss distance threshold to trigger TCA scan (km)"),
+    window_hours:    float = Query(default=72.0,   description="Look-ahead window for TCA computation (hours) — 72h minimum for operational use"),
 ):
     """
     Screen the full catalog for conjunction candidates.
@@ -157,7 +157,7 @@ def get_pair_conjunction(norad_id_1: str, norad_id_2: str,
 @app.get("/conjunction/high-risk")
 def get_high_risk_conjunctions(
     threshold_km: float = Query(default=10.0,  description="Miss distance threshold (km)"),
-    window_hours: float = Query(default=24.0,  description="Look-ahead window (hours)"),
+    window_hours: float = Query(default=72.0,  description="Look-ahead window (hours)"),
 ):
     """
     Return only conjunctions with composite_risk_score > 0.7.

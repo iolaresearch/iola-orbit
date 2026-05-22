@@ -723,6 +723,43 @@ These validations are Phase 2 completion criteria, not optional. A paper without
 
 ---
 
+---
+
+## 14. Scan Window vs. Threshold — Design Record
+
+*Written: 2026-05-22 · Jason Quist + Claude*
+
+A question was raised: is the `threshold_km=50.0` default too small given that satellites travel at ~8 km/s (reaction time of ~6 seconds at 50 km separation)?
+
+This reflects a correct physical instinct but points at the wrong parameter. The two numbers serve different purposes:
+
+**`threshold_km` — miss distance at TCA (not current separation)**
+
+`threshold_km=50.0` is the minimum separation the two satellites will reach at their closest approach — which may be hours or days in the future. If TCA is 48 hours away and the miss distance will be 0.5 km, you have 48 hours to act, not 6 seconds. This parameter is correctly set. USSPACECOM issues actionable CDMs for objects predicted within 1 km. Screening at 50 km catches all events worth attention with large margin.
+
+**`scan_window_seconds` — this is the reaction time parameter**
+
+The original default of 24 hours (`86,400s`) was too short for operational use. A conjunction detected at T-2h with a required maneuver burn is unactionable. The ground-to-spacecraft pipeline requires:
+
+1. Event detection and risk assessment
+2. Operator decision (human-in-the-loop boundary — no bypassing this)
+3. Ground station contact window (satellite may not be in view immediately)
+4. Command uplink and verification
+5. Maneuver burn execution and confirmation
+6. Post-burn tracking verification
+
+This chain realistically requires 24-48h lead time for a LEO satellite. 72h provides safe margin across all orbital regimes and ground station geometries.
+
+**Decision:** Default scan window changed from 24h to 72h across all conjunction endpoints and `screen_catalog()`.
+
+```python
+CONJUNCTION_DEFAULT_SCAN_WINDOW_SECONDS = 259_200  # 72 hours
+```
+
+The 6-second reaction time concern is real but it applies to **Phase 3 onboard IkirereMesh**, not the ground system. When the satellite has onboard conjunction awareness and autonomous maneuver authority (subject to pre-approved parameters and human oversight), it can react in seconds. The ground system is for planning, not emergency response.
+
+---
+
 *Document last updated: 2026-05-22*  
 *Signed: Jason Quist (Founder & CEO) · Claude (Chief Research Scientist / Systems Architect)*  
 *Next update: When Phase 2 empirical validation begins (k constant calibration, CDM comparison against Space-Track).*

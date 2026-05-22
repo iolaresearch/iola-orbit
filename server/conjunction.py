@@ -129,6 +129,26 @@ CONJUNCTION_ALTITUDE_PREFILTER_KM = 200.0
 # are unlikely to conjunct within the scan window.
 CONJUNCTION_SEPARATION_PREFILTER_KM = 1000.0
 
+# Default scan window for conjunction screening.
+# 72 hours (259,200 seconds) is the operational minimum.
+#
+# Why 72 hours minimum:
+#   A confirmed conjunction at T-2h is operationally unactionable.
+#   The ground-to-spacecraft pipeline requires:
+#     - Event detection and risk assessment
+#     - Operator decision (human-in-the-loop boundary)
+#     - Ground station contact window availability (may not be immediate)
+#     - Command uplink and verification
+#     - Maneuver burn execution and confirmation
+#   This chain realistically requires 24-48h lead time.
+#   72h provides sufficient margin for any orbital regime.
+#
+# Note: threshold_km=50.0 (miss distance at TCA) is correct and generous.
+# USSPACECOM issues actionable CDMs for objects within 1 km.
+# The 50 km threshold ensures all events worth screening are caught.
+# Reaction time is not a miss-distance concern — it is a scan-window concern.
+CONJUNCTION_DEFAULT_SCAN_WINDOW_SECONDS = 259_200  # 72 hours
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 2. VECTOR MATH — pure Python, no numpy
@@ -1619,7 +1639,8 @@ def generate_orbital_forecast(satellite, epoch,
 # 14. CATALOG SCREENING — O(n) + O(n²) CONJUNCTION PIPELINE
 # ===========================================================================
 
-def screen_catalog(satellites, threshold_km=50.0, scan_window_seconds=86400):
+def screen_catalog(satellites, threshold_km=50.0,
+                   scan_window_seconds=CONJUNCTION_DEFAULT_SCAN_WINDOW_SECONDS):
     """
     Screen the full satellite catalog for conjunction candidates.
 
