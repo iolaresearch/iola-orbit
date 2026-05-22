@@ -72,6 +72,7 @@ OUTPUT CONTRACT (every satellite record)
   orbital_class  — LEO / MEO / GEO
   bstar          — atmospheric drag coefficient (B*) from TLE
   sunlit         — True if satellite is in direct sunlight, False if in shadow
+  propagation_mode — 'SGP4' (near-space, LEO/MEO) or 'SDP4' (deep-space, GEO/HEO)
 """
 
 import math
@@ -314,8 +315,9 @@ def propagate_satellites():
                 "speed_km_s":    speed_km_s,
                 "altitude_km":   altitude_km,
                 "orbital_class": orbital_class,
-                "bstar":         satrec.bstar,
-                "sunlit":        _is_sunlit(position_km, sun_position_eci),
+                "bstar":             satrec.bstar,
+                "sunlit":            _is_sunlit(position_km, sun_position_eci),
+                "propagation_mode":  "SDP4" if satrec.method == "d" else "SGP4",
             })
 
         except Exception as error:

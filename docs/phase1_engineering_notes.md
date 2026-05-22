@@ -1119,10 +1119,140 @@ With `orbital_intelligence.py` correctly placed as `server/conjunction.py`, Phas
 
 3. **`compute_composite_risk_score()` weights need empirical validation:** The formula `0.45 × distance + 0.25 × velocity + 0.20 × urgency + 0.10 × probability` was designed from first principles. The weights have not been validated against historical conjunction events or against NASA CARA risk assessments. Before claiming research-grade accuracy, run the scorer against known historical CDMs from Space-Track and compare risk classifications. This is the Phase 2 validation milestone.
 
-4. **TLE age not yet incorporated into risk score:** Open Question Q1 (Section 11) remains open. The `epoch` field from Phase 1 is available in every satellite record. The risk scorer does not yet use it. TLE age → position uncertainty → adjusted risk score is Phase 2's novel contribution and must be added before Phase 2 is declared complete.
+4. **TLE age not yet incorporated into risk score:** ~~Open Question Q1 remains open.~~ **RESOLVED 2026-05-22.** `compute_tle_age_uncertainty_km()` implemented in `conjunction.py`. Formula: `σ(t) = σ₀ + k × |B*| / B*_nominal × age²`. Feeds into collision probability and composite risk score as a 5th component. Calibration of `k` against observed Space-Track position errors at multiple TLE ages is the first Phase 2 empirical milestone.
+
+---
+
+## 16. SGP4/SDP4 Accuracy Boundary — Permanent Research Record
+
+*Written: 2026-05-22 · Jason Quist + Claude*  
+*Source: Research discussion 2026-05-22, confirmed by Alph Doamekpor*
+
+This section is a permanent record. It must not be removed. Every Phase 2 and Phase 3 algorithm that uses position data inherits the accuracy limitations documented here.
+
+### The boundary
+
+100-meter position accuracy is not achievable with SGP4/SDP4 regardless of implementation quality. This is a physics constraint, not an implementation quality problem.
+
+SGP4 is a simplified analytical model. It accounts for: atmospheric drag, Earth's oblateness (J2–J6), and simplified lunisolar gravity. It does not model: precise atmospheric density variation (solar weather effects), solar radiation pressure with satellite-specific geometry, Earth's irregular gravitational field at high resolution, or ocean/solid Earth tides.
+
+**Accuracy ceiling by orbit class with fresh TLE (<24 hours old):**
+
+| Orbit | SGP4/SDP4 accuracy | Notes |
+|---|---|---|
+| LEO (<24h TLE) | 1–3 km | Dominant error: atmospheric drag uncertainty |
+| MEO (<24h TLE) | 5–15 km | Dominant error: lunisolar gravity |
+| GEO (<24h TLE) | 10–50 km | Dominant error: lunisolar + solar radiation pressure |
+| Any (7-day TLE) | 50–500 km | Error grows quadratically with B* |
+| Any (14-day TLE) | 500+ km | Operationally unreliable for LEO |
+
+GEO is worse than LEO with SGP4 because GEO is dominated by lunisolar perturbations and solar radiation pressure, which SGP4 models crudely. SDP4 (activated automatically for orbital period > 225 minutes) improves GEO accuracy but does not eliminate the ceiling.
+
+### The accuracy hierarchy
+
+```
+SGP4/SDP4 (Phase 1)          →  1–50 km depending on orbit and TLE age
+SP Ephemeris (licensed)       →  10–100 m  (requires Space-Track agreement)
+GPS onboard + POD             →  1–10 m    (requires hardware in orbit)
+```
+
+There is no open, freely available propagator between SGP4/SDP4 and SP ephemeris that covers the full catalog. The gap is real and it is a data access problem, not a math problem.
+
+### Orekit — flagged for Phase 2
+
+**Orekit** is an open-source astrodynamics library from CNES (French Space Agency). Java-based with a Python wrapper (`orekit` on PyPI). Supports numerical integration with:
+- NRLMSISE-00 atmospheric density model
+- EGM2008 gravity field (high-resolution)
+- Precise lunisolar perturbations
+- Solar radiation pressure with satellite geometry
+
+For specific objects with precise initial conditions, Orekit achieves ~100 m accuracy without a license.
+
+**Constraint:** Numerical integration is computationally expensive. Running Orekit for 15,000 satellites every 15 seconds is not feasible on current infrastructure. Not the right tool for catalog-wide screening.
+
+**Phase 2 application:** When Phase 2 flags a conjunction as HIGH or CRITICAL, switch from SGP4 to Orekit numerical integration for those two specific objects over the conjunction window (typically ±2 hours around TCA). This gives CCSDS-grade TCA precision for the pairs that matter, while SGP4 handles the catalog-wide screening. This is the correct architecture: broad screening with an analytical model, precise refinement with numerical integration.
+
+**Action item:** Evaluate Orekit integration before Phase 2 is declared production-ready for Tier 1 customers (NASA, ESA). Orekit is their environment. Demonstrating Orekit-grade TCA accuracy for flagged pairs makes IOLA's conjunction reports defensible at the highest tier.
+
+### What this means for IOLA's research claims
+
+Phase 1 and Phase 2 conjunction assessment is SGP4/SDP4-grade. This is the same accuracy as USSPACECOM's operational screening service. Claiming better accuracy without SP ephemeris or Orekit numerical integration would be scientifically indefensible.
+
+The correct claim: "IOLA's conjunction assessment achieves SGP4/SDP4-class positional accuracy, with uncertainty explicitly modelled as a function of TLE age and atmospheric drag coefficient." This is both accurate and defensible.
+
+---
+
+## 17. Phase 1 Validation Test Suite
+
+*Written: 2026-05-22 · Jason Quist + Claude*
+
+The full validation test suite is at `tests/phase1_validation.py`. It runs against the live production API. No mocks.
+
+**How to run:**
+```bash
+python tests/phase1_validation.py
+# Or against local server:
+API_URL=http://localhost:8000 python tests/phase1_validation.py
+```
+
+**Test coverage summary:**
+
+| Test | What it validates | Coverage |
+|---|---|---|
+| Test 1 | SGP4/SDP4 accuracy vs. reference | ISS (LEO), GPS IIR-3 (MEO), GOES-16 (GEO) |
+| Test 2 | Pipeline failure resilience | Output contract, non-empty cache, epoch validity |
+| Test 3 | Sunlit fraction by orbit class | LEO 60–70%, MEO 85–90%, GEO ~99% |
+| Test 4 | Propagation health per orbit class | SDP4 for GEO, bstar plausibility, Van Allen check |
+
+**Reference NORAD IDs used:**
+
+| Object | NORAD | Class | Accuracy threshold |
+|---|---|---|---|
+| ISS | 25544 | LEO | < 3 km |
+| GPS IIR-3 | 24876 | MEO | < 15 km |
+| GOES-16 | 41866 | GEO | < 50 km |
+
+**Note on Test 1 methodology:** The test compares IOLA's `/satellites` output against the canonical sgp4 library output for the same TLE at the same epoch. This validates **pipeline integrity** — that IOLA's propagation matches the reference implementation. Absolute accuracy validation (comparing against Space-Track published state vectors) requires an authenticated Space-Track account and is the manual validation milestone targeted for Q3 2026.
+
+---
+
+## 18. Phase 2 Pinned Notes
+
+*Written: 2026-05-22 · Jason Quist + Claude*
+
+Items that must be addressed at Phase 2 start. Not deferred — pinned.
+
+### PIN-001 — Kessler Syndrome (raised 2026-05-22)
+
+Kessler Syndrome is a cascade failure scenario first described by NASA scientist Donald Kessler in 1978: a collision between two objects in LEO generates debris, that debris collides with other objects, generating more debris, until the debris density makes certain orbital shells unusable for decades or centuries.
+
+**Why it matters for IOLA's Phase 2 risk scorer:**
+
+The standard conjunction risk scoring treats each conjunction as independent — two specific satellites with a specific miss distance. Kessler dynamics are not independent. The consequence of a collision is not just the loss of two satellites. It is potential cascade failure of an entire orbital shell.
+
+This means the **consequence side** of the risk formula must include a Kessler cascade term. A collision at 600 km altitude (where Starlink density is highest) has a different real-world consequence than a collision at 400 km (which re-enters faster, limiting debris lifetime) or at 1200 km (lower density, slower re-entry, but still dangerous).
+
+**How to incorporate in Phase 2:**
+
+The composite risk score currently weights by probability. It should also weight by orbital shell vulnerability — which shells are approaching the critical density threshold where a cascade becomes self-sustaining. This is IOLA's opportunity for a novel contribution beyond standard CDM scoring.
+
+**Reference:** Kessler, D.J. and Cour-Palais, B.G. (1978). "Collision Frequency of Artificial Satellites." Journal of Geophysical Research. The 2009 Iridium-Cosmos collision is the most significant real-world example.
+
+**Action item for Phase 2:** Add `orbital_shell_risk_index` to the conjunction output. Value 0–1 representing how close the object's orbital shell is to Kessler cascade threshold. Input to IkirereMesh reward function in Phase 3.
+
+### PIN-002 — TLE age uncertainty calibration (k constant)
+
+The formula `σ(t) = σ₀ + k × |B*| / B*_nominal × age²` uses `k = 0.5 km/day²` as a first-principles estimate. Before this is published or used for Tier 1 customer outputs, calibrate k empirically:
+
+1. Pull 20–30 satellites with known bstar values spanning the full range
+2. Compare IOLA's SGP4 positions against Space-Track at TLE ages of 1, 3, 5, and 7 days
+3. Fit k to the observed position error growth curve
+4. The fitted k is the defensible value for the research paper
+
+This calibration converts the formula from first-principles estimate to empirically validated. That distinction matters in peer review.
 
 ---
 
 *Document last updated: 2026-05-22*  
 *Signed: Jason Quist (Founder & CEO) · Claude (Chief Research Scientist / Systems Architect)*  
-*Next update: When Phase 2 validation begins, when shadow model inconsistency is resolved, or when TLE age is incorporated into the risk scorer.*
+*Next update: When Phase 1 validation tests are run and results recorded, or when Phase 2 begins.*
