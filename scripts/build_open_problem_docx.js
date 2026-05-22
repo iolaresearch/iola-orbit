@@ -160,7 +160,7 @@ function coverPage() {
     new Paragraph({
       alignment: AlignmentType.CENTER,
       children: [new TextRun({
-        text: "2026  ·  jason@ikirere.com  ·  ikirere.com",
+        text: "2026  ·  research@ikirere.com  ·  ikirere.com",
         font: "Arial", size: 20, color: MUTED,
       })],
     }),
@@ -178,8 +178,8 @@ const children = [
   new Paragraph({
     children: [new TextRun({
       text: "Given a catalog of 15,000+ actively tracked orbital objects, " +
-            "compute all pairwise conjunction risks - including cascade-weighted " +
-            "orbital shell density - in under 100 milliseconds on commodity CPU hardware.",
+            "compute all pairwise conjunction risks - including contextual orbital risk weighting - " +
+            "at operational real-time constraints on commodity CPU hardware.",
       font: "Arial", size: 26, bold: true, color: SPACE,
     })],
     spacing: { before: 80, after: 240 },
@@ -231,16 +231,16 @@ const children = [
       ["Space-Track (USSPACECOM)", "8-hour screening cadence"],
       ["LeoLabs", "Under 30 seconds (proprietary, undisclosed)"],
       ["GPU-accelerated propagation (Cambridge, 2026)", "4ms propagation only - not the full pipeline"],
-      ["Full pipeline on CPU at <100ms", "Unsolved"],
+      ["Full pipeline on CPU at operational real-time constraints", "Publicly available implementations remain computationally constrained at constellation scale"],
     ],
     [5200, 4160]
   ),
   space(),
   body(
-    "GPU at sub-100ms is within reach for propagation. " +
-    "CPU at <100ms for the full pipeline - including pairwise geometry, " +
-    "time of closest approach computation, and cascade-weighted risk scoring - " +
-    "is an open problem. No publicly verifiable implementation exists."
+    "GPU-accelerated propagation has been demonstrated at scale. " +
+    "The full pipeline on commodity CPU - pairwise geometry, " +
+    "time of closest approach computation, and contextual risk scoring - " +
+    "remains computationally constrained at constellation scale."
   ),
   space(),
   new Paragraph({
@@ -270,8 +270,8 @@ const children = [
   bullet("Produce a risk score per pair that accounts for: geometric proximity, relative velocity, " +
          "time urgency, positional uncertainty, and orbital shell population density"),
   bullet("Return results ranked by risk, highest first"),
-  bullet("Complete the full pipeline in under 100 milliseconds on a modern CPU"),
-  bullet("Scale to 50,000+ objects without architectural changes"),
+  bullet("Complete the full pipeline within operational real-time constraints on a modern CPU"),
+  bullet("Scale efficiently as orbital catalog density increases over time"),
   space(),
   body("Accuracy requirements:", { bold: true }),
   bullet("TCA accurate to within 2 seconds"),
@@ -283,9 +283,9 @@ const children = [
   h1("The Gap to Close"),
   rule(),
   body(
-    "The naive approach - serial pair evaluation with sequential propagation - " +
-    "takes approximately 2 hours for 15,000 satellites on a CPU. " +
-    "The target is 100 milliseconds. That is a 72,000x improvement."
+    "Existing CPU implementations process the full catalog serially. " +
+    "The constraint is not the algorithm - it is the architecture. " +
+    "The gap between current state and operational real-time constraints is large."
   ),
   space(),
   body(
@@ -310,13 +310,9 @@ const children = [
   makeTable(
     ["", ""],
     [
-      ["Name", "Jason Quist, Founder and CEO"],
       ["Organisation", "Ikirere Orbital Labs Africa"],
-      ["Email", "jason@ikirere.com"],
+      ["Email", "research@ikirere.com"],
       ["Website", "ikirere.com"],
-      ["Recognition", "Deep Learning Indaba 2025 Winner"],
-      ["Fellowship", "INSEAD AI Venture Lab Fellow"],
-      ["Programs", "Google and NVIDIA Inception"],
     ],
     [2800, 6560]
   ),
@@ -392,7 +388,7 @@ const doc = new Document({
           new Paragraph({
             border: { top: { style: BorderStyle.SINGLE, size: 4, color: ACCENT, space: 1 } },
             children: [
-              new TextRun({ text: "ikirere.com  ·  jason@ikirere.com", font: "Arial", size: 16, color: MUTED }),
+              new TextRun({ text: "ikirere.com  ·  research@ikirere.com", font: "Arial", size: 16, color: MUTED }),
               new TextRun({ text: "\t" }),
               new TextRun({ text: "Page ", font: "Arial", size: 16, color: MUTED }),
               new TextRun({ children: [PageNumber.CURRENT], font: "Arial", size: 16, color: MUTED }),
