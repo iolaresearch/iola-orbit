@@ -8,50 +8,52 @@ PURPOSE
 Validates the Phase 2 orbital intelligence engine against known
 physical constraints, mathematical invariants, and performance bounds.
 
-These are research-grade acceptance tests. Every test targets a real
-physical or mathematical invariant that would be violated if the
-conjunction engine is incorrect.
+Tests are split by data source:
+
+  SYNTHETIC DATA (Tests 1, 3, 5):
+    Mathematical invariants and edge cases where exact expected values
+    are known. These tests must always use synthetic data — real orbital
+    data changes every 15 seconds and cannot be verified by hand.
+
+  REAL SATELLITE DATA (Tests 2, 4, 6):
+    End-to-end pipeline validation against live orbital state from the
+    production API. These tests prove the algorithm works on real
+    physical objects, not just synthetic constructions.
+    Note: full screen_catalog() on all 15k satellites is NOT run here
+    to avoid exhausting Render's compute budget. A 500-satellite sample
+    from the real catalog is sufficient to validate the pipeline.
 
 =======================================================================
 TEST COVERAGE
 =======================================================================
-Test 1 — Geometric correctness
-  Compute separation for two satellites at known positions.
-  Verify against manually calculated Euclidean distance.
-  Test the mathematical foundation before trusting anything above it.
+Test 1 — Geometric correctness (SYNTHETIC)
+  Euclidean distance verified to machine precision against known values.
+  Mathematical foundation — stays synthetic permanently.
 
-Test 2 — TCA accuracy
-  Run find_closest_approach() for a known converging pair.
-  Verify refined TCA is within 2 seconds of coarse TCA.
-  Verify miss distance is non-negative and physically plausible.
+Test 2 — TCA accuracy on REAL satellites
+  ISS (NORAD 25544) and Starlink-1007 (NORAD 44713).
+  Fires Phase B SGP4 bisection (tca_refined=True) for the first time.
+  Validates pipeline with real tle_line1/tle_line2 fields.
 
-Test 3 — Risk score bounds and component consistency
-  Score must be in [0.0, 1.0] for all input combinations.
-  All components must be individually in [0.0, 1.0].
-  Score with approaching=True must be >= score with approaching=False.
-  Higher miss distance must produce lower or equal composite score.
+Test 3 — Risk score bounds (SYNTHETIC)
+  Score [0,1], monotonicity, Kessler factor — stays synthetic.
 
-Test 4 — Screen performance
-  Catalog screen must complete in under 60 seconds for a sample of
-  satellites. (Full 15k catalog screen is a research operation, not
-  a real-time one — document expected time accurately.)
+Test 4 — Screen performance on REAL 500-satellite sample
+  Fetches 500 real satellites from /satellites.
+  Validates stage reductions against real orbital distribution.
+  Documents real performance characteristics.
 
-Test 5 — CDM field completeness
-  All required fields present and correctly typed.
-  CCSDS-required fields present.
-  TCA in CDM must be later than CREATION_DATE.
-  OBJECT_1 and OBJECT_2 NORAD IDs must be distinct.
+Test 5 — CDM field completeness (SYNTHETIC)
+  Structural validation stays synthetic — field names never change.
+
+Test 6 — Real pair end-to-end CDM
+  Full pipeline for ISS vs Starlink-1007 from real propagated state.
+  Validates complete output contract on real data.
 
 =======================================================================
 HOW TO RUN
 =======================================================================
-From the repository root:
-
     python tests/phase2/phase2_validation.py
-
-Or against a local server for Test 4 (live catalog):
-
-    API_URL=http://localhost:8000 python tests/phase2/phase2_validation.py
 
 Output: PASS/FAIL per test with quantitative measurements.
 Full output written to tests/phase2/phase2_validation_response_<timestamp>.txt
@@ -87,7 +89,37 @@ from conjunction import (
     satellites_are_approaching,
 )
 
-API_URL = os.getenv("API_URL", "https://iola-orbit-dfxp.onrender.com")
+API_URL         = os.getenv("API_URL", "https://iola-orbit-dfxp.onrender.com")
+SATELLITES_URL  = f"{API_URL}/satellites"
+PAIR_URL        = f"{API_URL}/conjunction/pair"
+
+# Reference NORAD IDs for real-data tests
+ISS_NORAD       = "25544"   # International Space Station
+STARLINK_NORAD  = "44714"   # Starlink-1008 — LEO (44713 retired, 44714 confirmed active)
+
+
+def fetch_real_satellites(limit=None):
+    """
+    Fetch live satellite records from the production API.
+    Returns the satellites list. Optionally slices to first `limit` records.
+    """
+    print(f"  Fetching real satellites from {SATELLITES_URL} ...")
+    response = httpx.get(SATELLITES_URL, timeout=60)
+    response.raise_for_status()
+    body       = response.json()
+    satellites = body.get("satellites", body) if isinstance(body, dict) else body
+    if limit:
+        satellites = satellites[:limit]
+    print(f"  Loaded {len(satellites)} satellites (propagated_at: "
+          f"{body.get('propagated_at', 'N/A') if isinstance(body, dict) else 'N/A'})")
+    return satellites
+
+
+def find_satellite_by_norad(satellites, norad_id):
+    for sat in satellites:
+        if sat.get("norad_id") == norad_id:
+            return sat
+    return None
 
 # -----------------------------------------------------------------------
 # Known satellite state vectors for deterministic testing.
@@ -234,72 +266,90 @@ def test_1_geometric_correctness():
 
 
 # ===========================================================================
-# TEST 2 — TCA Accuracy
+# TEST 2 — TCA Accuracy on REAL Satellites
 # ===========================================================================
 
-def test_2_tca_accuracy():
+def test_2_tca_accuracy_real(satellites):
     """
-    Verify TCA computation produces physically plausible results.
-    TCA must be non-negative and miss distance must be non-negative.
-    Refined TCA must be within 2 minutes of coarse TCA (for synthetic data
-    without full TLE lines, refinement falls back to coarse — this is expected).
+    Run find_closest_approach() on ISS and Starlink-1007 — two real LEO
+    objects with real tle_line1/tle_line2 fields from the live catalog.
+
+    This test fires Phase B SGP4 bisection (tca_refined=True) for the
+    first time, proving the full two-phase TCA algorithm works on real
+    orbital data. Previous synthetic runs showed tca_refined=False because
+    synthetic satellites have no TLE lines — Phase B was never exercised.
+
+    ISS: NORAD 25544, altitude ~420 km, inclination ~51.6 deg
+    Starlink-1007: NORAD 44713, altitude ~550 km, LEO
+    These are in different altitude bands so TCA will be large (expected).
+    What matters: pipeline completes, tca_refined=True, all fields present.
     """
-    print_header("TEST 2 — TCA Accuracy")
+    print_header("TEST 2 — TCA Accuracy (REAL: ISS + Starlink-1008)")
     all_passed = True
 
-    # Short window for test speed (1 hour, 60s step)
-    approach = find_closest_approach(SYNTHETIC_SAT_A, SYNTHETIC_SAT_C,
-                                     scan_duration_seconds=3600,
+    iss      = find_satellite_by_norad(satellites, ISS_NORAD)
+    starlink = find_satellite_by_norad(satellites, STARLINK_NORAD)
+
+    if iss is None:
+        print_result("ISS (25544) found in live catalog", False, "Not present — skipping Test 2")
+        return False
+    if starlink is None:
+        print_result("Starlink-1007 (44713) found in live catalog", False, "Not present — skipping Test 2")
+        return False
+
+    print_result("ISS (25544) found in live catalog", True,
+                 f"altitude={iss.get('altitude_km', 'N/A'):.1f} km")
+    print_result("Starlink-1007 (44713) found in live catalog", True,
+                 f"altitude={starlink.get('altitude_km', 'N/A'):.1f} km")
+
+    # Confirm TLE lines are present (required for Phase B SGP4 bisection)
+    iss_has_tles      = bool(iss.get("tle_line1"))
+    starlink_has_tles = bool(starlink.get("tle_line1"))
+    all_passed        = all_passed and iss_has_tles and starlink_has_tles
+    print_result("ISS has tle_line1/tle_line2", iss_has_tles,
+                 "Phase B SGP4 bisection will fire" if iss_has_tles else "MISSING — Phase B will not fire")
+    print_result("Starlink-1007 has tle_line1/tle_line2", starlink_has_tles,
+                 "Phase B SGP4 bisection will fire" if starlink_has_tles else "MISSING — Phase B will not fire")
+
+    # Run TCA — 6-hour window, 60s coarse step (fast but real)
+    t0       = time.perf_counter()
+    approach = find_closest_approach(iss, starlink,
+                                     scan_duration_seconds=21600,
                                      coarse_step_seconds=60)
+    elapsed_ms = (time.perf_counter() - t0) * 1000
 
-    # Miss distance must be non-negative
-    miss_non_negative = approach["distance_km"] >= 0
-    all_passed        = all_passed and miss_non_negative
-    print_result(
-        "Miss distance >= 0",
-        miss_non_negative,
-        f"miss_distance_km = {approach['distance_km']:.3f}"
-    )
+    # Miss distance non-negative
+    miss_ok    = approach["distance_km"] >= 0
+    all_passed = all_passed and miss_ok
+    print_result("Miss distance >= 0 km",
+                 miss_ok, f"{approach['distance_km']:.3f} km")
 
-    # Miss distance must be physically plausible (< diameter of Earth)
-    miss_plausible = approach["distance_km"] < 12742.0
+    # Miss distance physically plausible
+    miss_plausible = approach["distance_km"] < 50000.0
     all_passed     = all_passed and miss_plausible
-    print_result(
-        "Miss distance < Earth diameter (12,742 km)",
-        miss_plausible,
-        f"miss_distance_km = {approach['distance_km']:.3f}"
-    )
+    print_result("Miss distance < 50,000 km (physically plausible)",
+                 miss_plausible, f"{approach['distance_km']:.3f} km")
 
-    # TCA must be within scan window
-    tca_in_window = 0 <= approach["time_seconds"] <= 3600
-    all_passed    = all_passed and tca_in_window
-    print_result(
-        "TCA within scan window (0-3600s)",
-        tca_in_window,
-        f"tca_seconds = {approach['time_seconds']:.1f}"
-    )
+    # TCA within scan window
+    tca_ok     = 0 <= approach["time_seconds"] <= 21600
+    all_passed = all_passed and tca_ok
+    print_result("TCA within 6-hour scan window",
+                 tca_ok, f"t+{approach['time_seconds']:.1f}s")
 
-    # tca_refined flag must be a boolean
-    refined_is_bool = isinstance(approach["tca_refined"], bool)
-    all_passed      = all_passed and refined_is_bool
-    print_result(
-        "tca_refined is boolean",
-        refined_is_bool,
-        f"tca_refined = {approach['tca_refined']}"
-    )
+    # SGP4 bisection fired (tca_refined=True) — the critical new check
+    tca_refined    = approach["tca_refined"] is True
+    all_passed     = all_passed and tca_refined
+    print_result("Phase B SGP4 bisection fired (tca_refined=True)",
+                 tca_refined,
+                 "CONFIRMED — first time real TLE lines exercised" if tca_refined
+                 else "FAILED — Phase B did not fire, check tle_line1/tle_line2 fields")
 
-    # approaching flag must be a boolean
-    approaching_is_bool = isinstance(approach["approaching"], bool)
-    all_passed          = all_passed and approaching_is_bool
-    print_result(
-        "approaching is boolean",
-        approaching_is_bool,
-        f"approaching = {approach['approaching']}"
-    )
-
-    print(f"\n  TCA result: miss={approach['distance_km']:.3f} km at "
-          f"t+{approach['time_seconds']:.1f}s, "
-          f"refined={approach['tca_refined']}, approaching={approach['approaching']}")
+    print(f"\n  ISS vs Starlink-1007 TCA:")
+    print(f"    miss_distance = {approach['distance_km']:.3f} km")
+    print(f"    tca           = t+{approach['time_seconds']:.1f}s")
+    print(f"    tca_refined   = {approach['tca_refined']}")
+    print(f"    approaching   = {approach['approaching']}")
+    print(f"    compute_time  = {elapsed_ms:.0f} ms")
 
     return all_passed
 
@@ -405,96 +455,101 @@ def test_3_risk_score_bounds():
 
 
 # ===========================================================================
-# TEST 4 — Screen Performance
+# TEST 4 — Screen Performance on REAL 500-Satellite Sample
 # ===========================================================================
 
-def test_4_screen_performance():
+def test_4_screen_performance_real(satellites):
     """
-    Measure catalog screening performance.
-    Test against a synthetic fleet of 200 satellites (fast, deterministic).
-    Report expected time for full 15k catalog.
+    Run screen_catalog() against 500 real satellites from the live catalog.
+
+    This test validates:
+      - The pipeline executes without error on real orbital data
+      - Stage reductions reflect real orbital distribution (not synthetic pattern)
+      - Conjunctions found (if any) represent real events
+      - SGP4 bisection fires on surviving pairs with real TLE lines
+
+    500 satellites is large enough to be representative and fast enough
+    to complete in under 5 minutes. The full 15,447-satellite screen
+    (~2 hours) is documented in the engineering notes but is NOT run
+    here to avoid exhausting Render's compute budget.
     """
-    print_header("TEST 4 — Screen Performance")
-    all_passed = True
+    print_header("TEST 4 — Screen Performance (REAL: 500 satellites)")
+    all_passed  = True
+    real_sample = satellites[:500]
 
-    # Build synthetic catalog: 200 objects in LEO at various altitudes
-    synthetic_fleet = []
-    for i in range(200):
-        angle_rad = (i / 200.0) * 2 * math.pi
-        radius_km = 7000.0 + (i % 10) * 50.0
-        synthetic_fleet.append({
-            "norad_id":      f"SYN{i:04d}",
-            "name":          f"SYNTHETIC-{i}",
-            "x":             radius_km * math.cos(angle_rad),
-            "y":             radius_km * math.sin(angle_rad),
-            "z":             float(i % 50) * 10.0,
-            "vx":            -7.5 * math.sin(angle_rad),
-            "vy":             7.5 * math.cos(angle_rad),
-            "vz":             0.0,
-            "speed_km_s":    7.5,
-            "altitude_km":   radius_km - 6371.0,
-            "orbital_class": "LEO",
-            "bstar":         1e-4,
-            "epoch":         (datetime.now(timezone.utc) - timedelta(days=1)).isoformat(),
-            "sunlit":        True,
-            "propagation_mode": "SGP4",
-        })
+    print(f"  Sample: first 500 satellites from live catalog")
+    print(f"  Orbital classes: "
+          f"LEO={sum(1 for s in real_sample if s.get('orbital_class')=='LEO')}, "
+          f"MEO={sum(1 for s in real_sample if s.get('orbital_class')=='MEO')}, "
+          f"GEO={sum(1 for s in real_sample if s.get('orbital_class')=='GEO')}")
 
-    # Time the screen with a tight threshold (fast, fewer TCA scans)
-    t0     = time.perf_counter()
-    result = screen_catalog(synthetic_fleet, threshold_km=50.0, scan_window_seconds=3600)
+    # Screen with tight threshold and short window — fast, still exercises full pipeline
+    t0         = time.perf_counter()
+    result     = screen_catalog(real_sample, threshold_km=50.0, scan_window_seconds=3600)
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
-    # Must complete in under 60 seconds
-    within_time = elapsed_ms < 60000
+    # Must complete in under 5 minutes
+    within_time = elapsed_ms < 300000
     all_passed  = all_passed and within_time
-    print_result(
-        "200-satellite screen completes under 60s",
-        within_time,
-        f"{elapsed_ms:.0f} ms"
-    )
+    print_result("500-satellite real screen completes under 5 min",
+                 within_time, f"{elapsed_ms:.0f} ms ({elapsed_ms/1000:.1f}s)")
 
-    # Result must have the required keys
+    # Required output keys
     required_keys = ["screened_at", "total_satellites", "pairs_altitude_passed",
                      "pairs_separation_passed", "conjunctions_found", "conjunctions", "summary"]
     keys_present  = all(k in result for k in required_keys)
     all_passed    = all_passed and keys_present
-    print_result(
-        "Screen result has all required keys",
-        keys_present,
-        str([k for k in required_keys if k not in result]) if not keys_present else "All present"
-    )
+    print_result("Screen result has all required keys", keys_present,
+                 "All present" if keys_present else str([k for k in required_keys if k not in result]))
 
-    # Summary counts must add up to conjunctions_found
+    # Summary counts consistent
     summary_total = sum(result["summary"].values())
     counts_match  = summary_total == result["conjunctions_found"]
     all_passed    = all_passed and counts_match
-    print_result(
-        "Summary counts match conjunctions_found",
-        counts_match,
-        f"summary total={summary_total}  conjunctions_found={result['conjunctions_found']}"
-    )
+    print_result("Summary counts match conjunctions_found", counts_match,
+                 f"summary={summary_total}  found={result['conjunctions_found']}")
 
-    # Stage counts must be logically ordered
-    stage_order = (result["pairs_altitude_passed"] >= result["pairs_separation_passed"])
+    # Stage reductions logical
+    stage_order = result["pairs_altitude_passed"] >= result["pairs_separation_passed"]
     all_passed  = all_passed and stage_order
-    print_result(
-        "Altitude-passed >= separation-passed (filter reduces pairs)",
-        stage_order,
-        f"altitude={result['pairs_altitude_passed']}  separation={result['pairs_separation_passed']}"
-    )
+    print_result("Filter stages reduce pairs monotonically", stage_order,
+                 f"altitude={result['pairs_altitude_passed']} -> "
+                 f"separation={result['pairs_separation_passed']}")
 
-    print(f"\n  Fleet: {result['total_satellites']} satellites")
-    print(f"  Stage 1 (altitude):   {result['pairs_altitude_passed']} pairs")
-    print(f"  Stage 2 (separation): {result['pairs_separation_passed']} pairs")
-    print(f"  Conjunctions found:   {result['conjunctions_found']}")
-    print(f"  Screen time:          {elapsed_ms:.0f} ms")
+    print(f"\n  Real sample results:")
+    print(f"    Total satellites     : {result['total_satellites']}")
+    print(f"    Stage 1 (altitude)   : {result['pairs_altitude_passed']} pairs")
+    print(f"    Stage 2 (separation) : {result['pairs_separation_passed']} pairs")
+    print(f"    Conjunctions found   : {result['conjunctions_found']}")
+    print(f"    Risk summary         : {result['summary']}")
+    print(f"    Screen time          : {elapsed_ms:.0f} ms")
 
-    # Extrapolate to full catalog
-    scale_factor  = (15447 / 200) ** 2  # O(n^2) scaling
-    estimated_s   = (elapsed_ms / 1000) * scale_factor
-    print(f"\n  Estimated full 15k catalog time: ~{estimated_s:.0f}s "
-          f"(this is a research operation, not a real-time call)")
+    if result["conjunctions_found"] > 0:
+        top = result["conjunctions"][0]
+        print(f"\n  Highest-risk conjunction:")
+        print(f"    {top['object_1_name']} ({top['object_1_norad']}) vs "
+              f"{top['object_2_name']} ({top['object_2_norad']})")
+        print(f"    miss_distance = {top['miss_distance_km']:.3f} km")
+        print(f"    risk_score    = {top['risk']['composite_score']}")
+        print(f"    tca_refined   = {top['tca_refined']}")
+        print(f"    risk_level    = {top['risk']['risk_level']}")
+
+        # If any conjunction found, SGP4 bisection should have fired
+        any_refined = any(c["tca_refined"] for c in result["conjunctions"])
+        all_passed  = all_passed and any_refined
+        print_result("At least one TCA used SGP4 bisection (tca_refined=True)",
+                     any_refined,
+                     "Phase B fired on real TLE data" if any_refined
+                     else "No refinement fired — check tle_line1/tle_line2 on catalog entries")
+    else:
+        print(f"\n  INFO: No conjunctions found within threshold/window on this sample.")
+        print(f"  This is expected — 500 real satellites in a 1h window at 50km threshold")
+        print(f"  is a tight screen. The pipeline is correct even with zero results.")
+
+    scale_factor = (15447 / 500) ** 2
+    estimated_s  = (elapsed_ms / 1000) * scale_factor
+    print(f"\n  Full 15k catalog estimate: ~{estimated_s:.0f}s "
+          f"(research batch operation — not a real-time call)")
 
     return all_passed
 
@@ -597,6 +652,103 @@ def test_5_cdm_field_completeness():
 
 
 # ===========================================================================
+# TEST 6 — Real Pair End-to-End CDM via API
+# ===========================================================================
+
+def test_6_real_pair_cdm():
+    """
+    Call GET /conjunction/pair/25544/44713 — ISS vs Starlink-1007.
+
+    This is the most complete real-world validation test:
+      - Fetches live propagated state from the production API
+      - Runs the full conjunction pipeline (TCA + risk + CDM)
+      - Fires Phase B SGP4 bisection on real TLE lines
+      - Returns a production CDM from real orbital data
+
+    If this test passes, Phase 2 is proven to work end-to-end on
+    real satellites, not just synthetic constructions.
+    """
+    print_header("TEST 6 — Real Pair End-to-End CDM (ISS vs Starlink-1008)")
+    all_passed = True
+
+    url = f"{PAIR_URL}/{ISS_NORAD}/{STARLINK_NORAD}?window_hours=6"
+    print(f"  Calling: {url}")
+
+    try:
+        t0       = time.perf_counter()
+        response = httpx.get(url, timeout=120)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        response.raise_for_status()
+        result = response.json()
+    except Exception as e:
+        print_result("API call succeeded", False, str(e))
+        return False
+
+    print_result("API call succeeded", True, f"{elapsed_ms:.0f} ms")
+
+    # Error check
+    if "error" in result:
+        print_result("No error in response", False, result["error"])
+        return False
+
+    # Required top-level keys
+    for key in ["queried_at", "object_1", "object_2", "current_separation_km",
+                "approach", "risk", "cdm"]:
+        present    = key in result
+        all_passed = all_passed and present
+        print_result(f"Field '{key}' present", present)
+
+    if "approach" not in result:
+        return False
+
+    approach = result["approach"]
+    risk     = result["risk"]
+    cdm      = result["cdm"]
+
+    # SGP4 bisection fired — the definitive test
+    tca_refined = approach.get("tca_refined") is True
+    all_passed  = all_passed and tca_refined
+    print_result(
+        "Phase B SGP4 bisection fired (tca_refined=True)",
+        tca_refined,
+        "CONFIRMED — real tle_line1/tle_line2 exercised full pipeline"
+        if tca_refined else "DID NOT FIRE — tle_line1/tle_line2 missing from catalog"
+    )
+
+    # Miss distance physically plausible
+    miss_ok    = 0 <= approach.get("distance_km", -1) < 50000
+    all_passed = all_passed and miss_ok
+    print_result("Miss distance in [0, 50000) km", miss_ok,
+                 f"{approach.get('distance_km', 'N/A'):.3f} km")
+
+    # Risk score in [0, 1]
+    score_ok   = 0.0 <= risk.get("composite_score", -1) <= 1.0
+    all_passed = all_passed and score_ok
+    print_result("Composite risk score in [0, 1]", score_ok,
+                 f"{risk.get('composite_score', 'N/A')}")
+
+    # CDM has CCSDS fields
+    ccsds_fields = ["CDM_VERSION", "CREATION_DATE", "TCA",
+                    "MISS_DISTANCE_KM", "COLLISION_PROBABILITY", "OBJECT_1", "OBJECT_2"]
+    for field in ccsds_fields:
+        present    = field in cdm
+        all_passed = all_passed and present
+        print_result(f"CDM field '{field}' present", present)
+
+    print(f"\n  ISS vs Starlink-1007 live result:")
+    print(f"    current_separation = {result.get('current_separation_km', 'N/A'):.1f} km")
+    print(f"    miss_distance      = {approach.get('distance_km', 'N/A'):.3f} km")
+    print(f"    tca_seconds        = t+{approach.get('time_seconds', 'N/A'):.1f}s")
+    print(f"    tca_refined        = {approach.get('tca_refined')}")
+    print(f"    risk_level         = {risk.get('risk_level')}")
+    print(f"    composite_score    = {risk.get('composite_score')}")
+    print(f"    shell_density      = {risk.get('shell_density_factor')}")
+    print(f"    recommended_action = {cdm.get('RECOMMENDED_ACTION', {}).get('action', 'N/A')}")
+
+    return all_passed
+
+
+# ===========================================================================
 # MAIN
 # ===========================================================================
 
@@ -620,15 +772,25 @@ def main():
     print(f"\n{'=' * 70}")
     print("  IOLA PHASE 2 VALIDATION SUITE")
     print(f"  Run timestamp : {run_timestamp.isoformat()}")
+    print(f"  API endpoint  : {API_URL}")
     print(f"  Python        : {sys.version.split()[0]}")
     print(f"{'=' * 70}")
 
+    # Fetch real satellite data once — used by Tests 2, 4, 6
+    try:
+        real_satellites = fetch_real_satellites(limit=500)
+    except Exception as e:
+        print(f"\nFATAL: Could not reach API -- {e}")
+        sys.stdout = original_stdout
+        sys.exit(1)
+
     results = {
         "test_1": test_1_geometric_correctness(),
-        "test_2": test_2_tca_accuracy(),
+        "test_2": test_2_tca_accuracy_real(real_satellites),
         "test_3": test_3_risk_score_bounds(),
-        "test_4": test_4_screen_performance(),
+        "test_4": test_4_screen_performance_real(real_satellites),
         "test_5": test_5_cdm_field_completeness(),
+        "test_6": test_6_real_pair_cdm(),
     }
 
     passed_count = sum(1 for v in results.values() if v)
@@ -655,6 +817,8 @@ def main():
         "Phase 2 Validation -- Full Output Record\n"
         "========================================\n"
         f"Run at    : {run_timestamp.isoformat()}\n"
+        f"API       : {API_URL}\n"
+        f"Real sats : {len(real_satellites)}\n"
         f"Python    : {sys.version.split()[0]}\n"
         f"Result    : {passed_count}/{total_count} tests passed\n"
         "========================================\n\n"

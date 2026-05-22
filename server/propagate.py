@@ -321,6 +321,8 @@ def propagate_satellites():
                 "bstar":            entry["bstar"],
                 "sunlit":           _is_sunlit(position_km, sun_position_eci),
                 "propagation_mode": "SDP4" if satrec.method == "d" else "SGP4",
+                "tle_line1":        entry["tle_line1"],
+                "tle_line2":        entry["tle_line2"],
             })
 
         except Exception as error:
