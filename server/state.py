@@ -34,4 +34,5 @@ When the platform scales to multiple workers, replace with a Redis
 cache. Only this file and the two import sites change.
 """
 
-satellite_cache = []
+satellite_cache    = []
+last_propagated_at = None   # ISO 8601 UTC string, set by propagate.py on each run

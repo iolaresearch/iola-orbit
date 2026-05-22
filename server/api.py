@@ -34,7 +34,7 @@ No mutation endpoints exist in Phase 1.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
-from state import satellite_cache
+import state
 
 app = FastAPI()
 
@@ -66,7 +66,10 @@ def get_raw_tle_catalog():
 def get_propagated_satellite_state():
     """
     Return the current propagated orbital state for all satellites.
-    Each record includes position, velocity, altitude, orbital class,
-    sunlit status, epoch, speed, and B* drag coefficient.
+    Includes propagated_at — the UTC timestamp of the last propagation
+    run — so consumers can epoch-match their own reference computations.
     """
-    return satellite_cache
+    return {
+        "propagated_at": state.last_propagated_at,
+        "satellites":    state.satellite_cache,
+    }

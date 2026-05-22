@@ -78,7 +78,7 @@ OUTPUT CONTRACT (every satellite record)
 import math
 from sgp4.api import Satrec, jday
 from datetime import datetime, timezone, timedelta
-from state import satellite_cache
+import state
 
 # -----------------------------------------------------------------------
 # Physical constants
@@ -332,7 +332,8 @@ def propagate_satellites():
         )
         return
 
-    satellite_cache[:] = propagated_satellites
+    state.satellite_cache[:] = propagated_satellites
+    state.last_propagated_at  = current_utc.isoformat()
     print(
         f"Propagation complete: {len(propagated_satellites)} satellites "
         f"at {current_utc.isoformat()}"
