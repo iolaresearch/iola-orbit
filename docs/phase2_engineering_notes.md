@@ -323,9 +323,108 @@ CLUSTER and MMS (altitude > 100,000 km at apogee) have highly elliptical orbits.
 
 ---
 
+## 11. Two-Body vs. Fleet — The TCAS Architecture Question
+
+*Written: 2026-05-22 · Jason Quist + Claude*
+
+This section records an important architectural clarification about how Phase 2 conjunction assessment relates to fleet-level safety, and how it evolves in Phase 3.
+
 ---
 
-## 11. Mathematical Derivation Record — From First Principles
+### The question
+
+Is Phase 2 computing conjunctions between two satellites, or across all satellites simultaneously with a threshold filter?
+
+The answer: **both, but they serve fundamentally different purposes and operate at different layers of the architecture.**
+
+---
+
+### Layer 1 — The two-body computation (mathematical foundation)
+
+`distance_between_satellites()`, `find_closest_approach()`, and `compute_composite_risk_score()` all operate on **exactly two satellites**. This is mathematically correct and cannot be changed.
+
+Conjunction is a two-body problem. You cannot compute a single conjunction event between three or more objects simultaneously in the same way you compute one between two. The physics of closest approach — the geometry of converging trajectories, the time of minimum separation, the relative velocity at that moment — is inherently pairwise.
+
+This is not a limitation. It is the correct formulation. Every conjunction assessment system in aerospace — USSPACECOM, NASA CARA, ESA's SSOC — operates on satellite pairs. The pair is the unit of conjunction analysis.
+
+---
+
+### Layer 2 — `screen_catalog()` — The fleet-level operation
+
+`screen_catalog()` is the fleet-level wrapper. It takes all 15,447 tracked satellites and runs the two-body computation for every relevant pair. The 200 km altitude threshold is the pre-filter that makes this computationally tractable — it eliminates ~95% of pairs before any expensive geometry is computed.
+
+This **is** the TCAS analogy at the ground level. Every satellite in the catalog is checked against every other satellite in its altitude neighbourhood. The output is a ranked list of the most dangerous encounters across the entire tracked fleet.
+
+The architectural distinction:
+
+| What | Scope | Unit |
+|---|---|---|
+| `find_closest_approach()` | Two satellites | Pair |
+| `screen_catalog()` | All 15,447 objects | Fleet |
+
+---
+
+### The gap — batch vs. continuous
+
+TCAS on aircraft runs **continuously and simultaneously** on every aircraft. Every plane is checking its own local bubble of traffic at all times, in real time, autonomously.
+
+`screen_catalog()` is a **batch operation**. For 15,447 satellites it takes approximately 68 minutes. It cannot run continuously. It is scheduled — run every N hours, results cached, served via API.
+
+This is not a flaw in the design. It is a constraint of the operational context:
+
+**We do not control the satellites.** TCAS works because every aircraft runs its own transponder and onboard processor. We are a ground observer with read-only access to TLE data. We cannot give each of the 15,447 tracked satellites its own local TCAS instance.
+
+The ground system (`screen_catalog`) is the correct tool for what we can do: observe the full catalog, identify the highest-risk encounters, and produce intelligence for human operators.
+
+---
+
+### Layer 3 — Phase 3 IkirereMesh — The onboard TCAS
+
+When IOLA's own CubeSat is in orbit running IkirereMesh firmware, the architecture changes fundamentally.
+
+Each satellite in the IOLA constellation will:
+1. Receive its own propagated orbital state
+2. Monitor its local neighbourhood within a threshold radius (e.g. 50 km)
+3. Run continuous pairwise conjunction checks against other IOLA satellites
+4. Report risk scores to the IkirereMesh coordination layer
+5. Receive coordination proposals and apply them subject to human approval
+
+This **is** the onboard TCAS equivalent. Each satellite is its own sensor, running its own local conjunction awareness continuously and in real time. The IkirereMesh coordination layer aggregates the local awareness from all IOLA satellites and proposes fleet-level coordination decisions.
+
+The two systems are complementary, not competing:
+
+| Layer | Scope | Continuity | Who controls | Analogy |
+|---|---|---|---|---|
+| `screen_catalog()` | All 15,447 tracked objects | Batch, every N hours | Ground observer | Air traffic control radar sweep |
+| IkirereMesh onboard | IOLA constellation only | Continuous, real-time | IOLA satellites | TCAS on each aircraft |
+
+---
+
+### Why this distinction matters for the research paper
+
+The paper must distinguish clearly between:
+
+1. **Ground-based conjunction intelligence** (Phase 2) — what any ground operator with TLE access can do. Standard aerospace practice. Novel only in the risk scoring formula.
+
+2. **Onboard autonomous coordination** (Phase 3) — what requires the satellite itself to participate. Novel in full. No current nanosatellite constellation runs distributed autonomous conjunction awareness with RL coordination. This is the ICML/NeurIPS contribution.
+
+The Phase 2 ground system is the **training data generator** for Phase 3. Every conjunction event detected by `screen_catalog()` becomes a training example for the IkirereMesh RL policy: what was the state, what was the risk, what coordination decision was made (or should have been made), what was the outcome. The moat compounds because the ground system and the onboard system feed each other.
+
+---
+
+### Implementation note
+
+The 200 km altitude threshold in `screen_catalog()` is architecturally equivalent to the TCAS range ring — it defines the neighbourhood within which conjunction is considered possible. Objects outside this neighbourhood are not checked, exactly as TCAS ignores aircraft beyond its surveillance range.
+
+The difference: TCAS range is a physical radio range. Our threshold is a geometric impossibility bound — two satellites more than 200 km apart in altitude cannot share the same orbital shell and therefore cannot be in conjunction. The TCAS analogy is intuitive; the physical justification is orbital mechanics.
+
+---
+
+*Written: 2026-05-22 · Jason Quist + Claude*
+
+---
+
+## 12. Mathematical Derivation Record — From First Principles
 
 *Written: 2026-05-22 · Jason Quist + Claude*  
 *Source: Independent derivation conducted in parallel with implementation, 2026-05-22*
