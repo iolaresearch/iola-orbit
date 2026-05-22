@@ -12,7 +12,7 @@
 
 Given a catalog of 15,000+ actively tracked orbital objects, compute all pairwise
 conjunction risks — including cascade-weighted orbital shell density — in under 100
-milliseconds.
+milliseconds **on commodity CPU hardware**.
 
 ---
 
@@ -39,14 +39,20 @@ a hand grenade.
 
 ### The screening bottleneck
 
-Every 15,000-satellite catalog contains:
+The pair count is not fixed — it grows with the catalog, which grows continuously:
 
-```
-15,000 × 14,999 / 2 = 112,492,500 pairs
-```
+| Catalog | Raw pairs | After altitude filter (~5% survive) | Est. year |
+|---|---|---|---|
+| 15,447 active (today) | 119,267,631 | ~5,963,000 | 2026 |
+| 27,000 all tracked | 364,486,500 | ~18,224,000 | 2026 |
+| 50,000 (SpaceX + Kuiper + growth) | 1,249,975,000 | ~62,499,000 | ~2030 |
 
-At 1 millisecond per pair (faster than any current Python implementation): 112,492
-seconds = 31 hours. Not viable.
+SpaceX has regulatory approval for 42,000 Starlinks. Amazon Kuiper: 3,236. OneWeb: 648.
+The problem does not stay at 112 million pairs. It reaches 1.25 billion. A solution that
+works at 15,000 must be designed to scale.
+
+At 1 millisecond per surviving pair on CPU: 5.9 million pairs = 5,900 seconds = 98 minutes.
+Not viable. The goal is 100ms total — requiring a 35,000x improvement over naive serial execution.
 
 Current state of the art:
 - **Space-Track (USSPACECOM):** 8-hour screening cadence
@@ -97,7 +103,14 @@ Returned as a ranked list sorted by composite risk score, highest first.
 | TCA accuracy | ±2 seconds |
 | Miss distance accuracy | ±1 km for LEO (altitude < 2,000 km) |
 | Output completeness | All pairs with altitude separation < 200 km |
-| Hardware | Achievable on a single NVIDIA A100 or equivalent |
+| Hardware | **Commodity CPU — any modern server or laptop** |
+
+**Why CPU, not GPU:** GPU at sub-100ms is already within reach (Cambridge's jaxsgp4
+achieved propagation-only in 4ms on an A100 in March 2026). GPU access is expensive,
+specialised, and unavailable to most satellite operators, university labs, and researchers
+in emerging markets. A CPU solution runs on any ground station, any laptop, any cloud
+VM. That is the democratising result. That is what keeps the orbital environment
+accessible to the world, not just to operators with GPU clusters.
 
 ---
 
