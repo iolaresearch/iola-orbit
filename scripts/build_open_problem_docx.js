@@ -181,7 +181,7 @@ const children = [
   rule(),
   new Paragraph({
     children: [new TextRun({
-      text: "Given a catalog of 15,000+ actively tracked orbital objects, compute all pairwise conjunction risks — including cascade-weighted orbital shell density — in under 100 milliseconds on commodity CPU hardware.",
+      text: "Given a catalog of 15,000+ actively tracked orbital objects, compute all pairwise conjunction risks - including cascade-weighted orbital shell density - in under 100 milliseconds on commodity CPU hardware.",
       font: "Arial", size: 26, bold: true, color: SPACE,
     })],
     spacing: { before: 80, after: 200 },
@@ -191,7 +191,7 @@ const children = [
   h1("Background"),
   rule(),
   h2("The Kessler Cascade"),
-  body("In 1978 Donald Kessler and Burton Cour-Palais described a cascade failure scenario that has since become the defining existential risk of orbital infrastructure: a collision in LEO generates debris, each fragment strikes other satellites, more debris, more collisions — until the orbital shell becomes self-sustaining in its own destruction."),
+  body("In 1978 Donald Kessler and Burton Cour-Palais described a cascade failure scenario that has since become the defining existential risk of orbital infrastructure: a collision in LEO generates debris, each fragment strikes other satellites, more debris, more collisions - until the orbital shell becomes self-sustaining in its own destruction."),
   space(),
   body("This is not theoretical. The 2009 Iridium-Cosmos collision and the 2021 Cosmos-1408 ASAT test each generated thousands of fragments still in orbit today. The LEO shell between 400 and 600 km is approaching critical density."),
   space(),
@@ -199,7 +199,7 @@ const children = [
   space(),
 
   h2("The Screening Bottleneck"),
-  body("The pair count is not fixed — it grows with the catalog, which grows continuously:"),
+  body("The pair count is not fixed - it grows with the catalog, which grows continuously:"),
   space(),
   makeTable(
     ["Catalog", "Raw Pairs", "After Altitude Filter (~5%)", "Est. Year"],
@@ -213,7 +213,7 @@ const children = [
   space(),
   body("SpaceX has regulatory approval for 42,000 Starlinks. Amazon Kuiper: 3,236. OneWeb: 648. The problem does not stay at 112 million pairs. It reaches 1.25 billion. A solution that works today must be designed to scale to 2030 catalog sizes."),
   space(),
-  body("At 1 millisecond per surviving pair on CPU: 5.9 million pairs = 5,900 seconds = 98 minutes. The goal is 100ms total — requiring a 35,000x improvement over naive serial execution."),
+  body("At 1 millisecond per surviving pair on CPU: 5.9 million pairs = 5,900 seconds = 98 minutes. The goal is 100ms total - requiring a 35,000x improvement over naive serial execution."),
   space(),
 
   h2("Current State of the Art"),
@@ -222,13 +222,13 @@ const children = [
     [
       ["Space-Track (USSPACECOM)", "8-hour cadence", "Full catalog, batch"],
       ["LeoLabs", "<30 seconds", "Custom, proprietary architecture"],
-      ["jaxsgp4 (Cambridge, March 2026)", "4ms on A100 GPU", "Propagation only — not full pipeline"],
+      ["jaxsgp4 (Cambridge, March 2026)", "4ms on A100 GPU", "Propagation only - not full pipeline"],
       ["IOLA (this work)", "~2 hours on CPU", "Full pipeline, CPU, validated 6/6"],
     ],
     [2600, 2200, 4560]
   ),
   space(),
-  body("jaxsgp4 (arxiv:2603.27830) solves propagation. Nobody has published the full pipeline — propagation + pairwise geometry + TCA + cascade-weighted risk scoring — at sub-second scale on CPU."),
+  body("jaxsgp4 (arxiv:2603.27830) solves propagation. Nobody has published the full pipeline - propagation + pairwise geometry + TCA + cascade-weighted risk scoring - at sub-second scale on CPU."),
   space(),
 
   // FORMAL PROBLEM STATEMENT
@@ -245,10 +245,10 @@ const children = [
 
   h2("Required Output"),
   body("For every pair (i, j) where i < j and |altitude_i - altitude_j| < 200 km:"),
-  bullet("Time of Closest Approach (TCA) — UTC timestamp accurate to ±2 seconds"),
-  bullet("Miss distance at TCA — in km, accurate to ±1 km for LEO objects"),
+  bullet("Time of Closest Approach (TCA) - UTC timestamp accurate to ±2 seconds"),
+  bullet("Miss distance at TCA - in km, accurate to ±1 km for LEO objects"),
   bullet("Composite risk score [0,1] incorporating: miss distance, relative velocity, time urgency, collision probability, TLE age uncertainty, orbital shell density (cascade factor)"),
-  bullet("Conjunction Data Message (CDM) — structured advisory, CCSDS 508.0-B-1 mappable"),
+  bullet("Conjunction Data Message (CDM) - structured advisory, CCSDS 508.0-B-1 mappable"),
   bullet("Ranked list sorted by composite risk score, highest first"),
   space(),
 
@@ -260,7 +260,7 @@ const children = [
       ["TCA accuracy", "±2 seconds"],
       ["Miss distance accuracy", "±1 km for LEO (altitude < 2,000 km)"],
       ["Output completeness", "All pairs with altitude separation < 200 km"],
-      ["Hardware", "Commodity CPU — any modern server or laptop"],
+      ["Hardware", "Commodity CPU - any modern server or laptop"],
     ],
     [4200, 5160]
   ),
@@ -280,7 +280,7 @@ const children = [
   h1("Why This Is Hard"),
   rule(),
   h3("1. Propagation at Scale"),
-  body("Each satellite must be propagated to multiple future time points using SGP4/SDP4. jaxsgp4 (Cambridge, 2026) solves this on GPU. The CPU equivalent — without hardware parallelism — requires vectorised batch evaluation using sgp4_array() and numpy, and has not been done at sub-second scale for 15k+ objects."),
+  body("Each satellite must be propagated to multiple future time points using SGP4/SDP4. jaxsgp4 (Cambridge, 2026) solves this on GPU. The CPU equivalent - without hardware parallelism - requires vectorised batch evaluation using sgp4_array() and numpy, and has not been done at sub-second scale for 15k+ objects."),
   space(),
 
   h3("2. Pairwise Geometry at Scale"),
@@ -288,7 +288,7 @@ const children = [
   space(),
 
   h3("3. Novel Risk Scoring at Scale"),
-  body("The composite risk score includes an orbital shell density factor — a function of how many objects share the altitude band of the conjunction. Computing this naively requires querying the full catalog for each pair. A histogram pre-computation reduces it to O(n) setup + O(1) lookup per pair. This must be integrated into the same vectorised pass."),
+  body("The composite risk score includes an orbital shell density factor - a function of how many objects share the altitude band of the conjunction. Computing this naively requires querying the full catalog for each pair. A histogram pre-computation reduces it to O(n) setup + O(1) lookup per pair. This must be integrated into the same vectorised pass."),
   space(),
 
   // WHAT EXISTS
@@ -317,15 +317,15 @@ const children = [
   space(),
   h2("Key Validation Results (Real Orbital Data)"),
   bullet("13 real conjunctions found in a 500-satellite sample in 231ms on CPU"),
-  bullet("ISS ZARYA vs ISS UNITY: 0.000 km miss distance, CRITICAL — co-orbiting modules correctly identified"),
+  bullet("ISS ZARYA vs ISS UNITY: 0.000 km miss distance, CRITICAL - co-orbiting modules correctly identified"),
   bullet("Phase B SGP4 bisection confirmed (tca_refined=True) on real TLE lines"),
   bullet("Shell density factor = 1.0 for LEO conjunctions (Kessler cascade factor working on real data)"),
   bullet("Full production CDM generated for real ISS vs Starlink-1008 pair"),
   space(),
   h2("The Novel IP"),
-  bullet("compute_tle_age_uncertainty_km() — bstar-weighted quadratic uncertainty: σ(t) = σ₀ + k × (|B*| / B*_nominal) × age²"),
-  bullet("compute_orbital_shell_density() — Kessler cascade factor from live catalog population"),
-  bullet("compute_composite_risk_score() — 6-component weighted risk formula including both novel terms"),
+  bullet("compute_tle_age_uncertainty_km() - bstar-weighted quadratic uncertainty: σ(t) = σ₀ + k × (|B*| / B*_nominal) × age²"),
+  bullet("compute_orbital_shell_density() - Kessler cascade factor from live catalog population"),
+  bullet("compute_composite_risk_score() - 6-component weighted risk formula including both novel terms"),
   space(),
   body("The gap: ~2 hours (current CPU) to <100ms (target) is a computational architecture problem, not an algorithm problem. The algorithm is correct. It needs vectorisation."),
   space(),
@@ -334,9 +334,9 @@ const children = [
   h1("The Research Contribution"),
   rule(),
   body("A solution would produce:"),
-  bullet("A CPU-native conjunction screening pipeline that processes the full LEO catalog in under 100ms — the first publicly verifiable implementation at this scale"),
-  bullet("Real-time Kessler cascade risk scoring — not just pairwise Pc (USSPACECOM standard) but cascade-weighted orbital shell risk reflecting true consequence"),
-  bullet("A foundation for autonomous orbital coordination — millisecond screening enables onboard real-time conjunction awareness, the prerequisite for IkirereMesh Phase 3"),
+  bullet("A CPU-native conjunction screening pipeline that processes the full LEO catalog in under 100ms - the first publicly verifiable implementation at this scale"),
+  bullet("Real-time Kessler cascade risk scoring - not just pairwise Pc (USSPACECOM standard) but cascade-weighted orbital shell risk reflecting true consequence"),
+  bullet("A foundation for autonomous orbital coordination - millisecond screening enables onboard real-time conjunction awareness, the prerequisite for IkirereMesh Phase 3"),
   bullet("A research paper targeting ICML, NeurIPS, or IEEE Aerospace Conference"),
   space(),
 
@@ -346,16 +346,16 @@ const children = [
   rule(),
   body("IOLA is building this system. We are looking for:"),
   space(),
-  bullet("Research collaborators — CPU systems researchers, astrodynamicists, ML engineers at the intersection of orbital mechanics and real-time systems"),
-  bullet("Compute contributors — access to high-core-count CPU time for benchmarking and validation"),
-  bullet("Co-authors — for the research paper targeting ICML/NeurIPS/IEEE Aerospace"),
+  bullet("Research collaborators - CPU systems researchers, astrodynamicists, ML engineers at the intersection of orbital mechanics and real-time systems"),
+  bullet("Compute contributors - access to high-core-count CPU time for benchmarking and validation"),
+  bullet("Co-authors - for the research paper targeting ICML/NeurIPS/IEEE Aerospace"),
   space(),
   body("If you have solved a component of this problem, are working on it, or want to reach out:"),
   space(),
   makeTable(
     ["Contact", "Details"],
     [
-      ["Name", "Jason Quist — Founder & CEO, Ikirere Orbital Labs Africa"],
+      ["Name", "Jason Quist - Founder & CEO, Ikirere Orbital Labs Africa"],
       ["Email", "jason@ikirere.com"],
       ["Website", "ikirere.com"],
       ["Recognition", "Deep Learning Indaba 2025 Winner"],
