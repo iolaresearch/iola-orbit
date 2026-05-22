@@ -893,6 +893,65 @@ All tests passing. Performance characteristics documented and understood.
 
 ---
 
+---
+
+## 16. State of the Art — GPU-Accelerated Orbital Screening
+
+*Written: 2026-05-22 · Jason Quist + Claude*  
+*Source: Deep research conducted 2026-05-22 in response to performance question*
+
+The earlier analysis in Section 15 established that microseconds is impossible on CPU Python. External research was conducted to determine what the actual ceiling is with the right hardware and architecture. The findings change the Phase 4 roadmap.
+
+---
+
+### What has actually been achieved
+
+| System | Hardware | Satellites | Time | Notes |
+|---|---|---|---|---|
+| jaxsgp4 (Cambridge, March 2026) | Single A100 GPU | 9,341 (Starlink) | **4ms** | 1,000 future time steps each; 1,500× faster than C++ baseline |
+| CUDA parallel SGP4 (Advances in Space Research) | NVIDIA GPU | Full catalog | Real-time | Block decomposition; conjunction probability in parallel |
+| sgp4.gl (Kayhan Space, Sept 2025) | Browser WebGL GPU | Thousands | Real-time | Client-side GPU acceleration in the browser |
+| LeoLabs custom screening | Proprietary | Full catalog | **<30 seconds** | CDMs returned in minutes vs Space-Track's 8-hour cadence |
+
+**Key paper:** jaxsgp4 — arxiv:2603.27830 — Cambridge University, March 2026.  
+Open source. Directly solves IOLA's propagation problem. Published one month before this entry was written.
+
+---
+
+### Updated performance map (honest)
+
+| Approach | Hardware | Time for full 15k catalog | Status |
+|---|---|---|---|
+| Pure Python CPU loop | Render free tier | ~2 hours | Current IOLA |
+| numpy vectorised + sgp4_array() | Any server | ~30 seconds | Phase 4 target |
+| CUDA GPU parallel | NVIDIA GPU | seconds | Production industry |
+| JAX/GPU (jaxsgp4 architecture) | A100 GPU | **~4ms** | State of the art |
+| Browser WebGL GPU | Any device | Real-time | Kayhan sgp4.gl |
+
+---
+
+### What this means for IOLA
+
+**Phase 4:** numpy vectorised distance matrix + sgp4_array() batch evaluation. Gets to 30 seconds on current CPU infrastructure. No new hardware required.
+
+**Phase 5+ (with NVIDIA compute from Google/Nvidia Inception and Deep Learning Indaba grants):** JAX or PyTorch SGP4 on GPU. Gets to milliseconds for the full catalog. The compute credits are already in place. The architecture is published. This is an engineering execution problem, not a research problem.
+
+**For the paper:** jaxsgp4 (arxiv:2603.27830) must be cited. It directly addresses orbital propagation at scale. The IOLA paper's contribution is not faster propagation — it is the **conjunction screening pipeline with novel risk scoring** (Kessler cascade factor, bstar-weighted uncertainty) that runs on top of GPU-accelerated propagation. Phase 2 is the novel layer. GPU propagation is the infrastructure.
+
+---
+
+### The open problem IOLA is positioned to solve
+
+jaxsgp4 solves: propagation for N satellites to M time steps in milliseconds.
+
+What does not yet exist at millisecond scale: **the full many-to-many conjunction screening pipeline** — altitude filtering, pairwise separation, TCA computation, risk scoring, CDM generation — for 15,000+ satellites with novel cascade-aware risk scoring, in a single GPU-native pass.
+
+LeoLabs does custom screenings in 30 seconds. Space-Track takes 8 hours. Nobody has published a sub-second solution for the full 119-million-pair catalog that includes novel cascade-weighted risk scoring.
+
+That is the problem IOLA is building toward. See `docs/open_problem_statement.md` for the formal statement.
+
+---
+
 *Document last updated: 2026-05-22*
 *Signed: Jason Quist (Founder & CEO) · Claude (Chief Research Scientist / Systems Architect)*
 *Next update: When Phase 2 empirical validation begins (k constant calibration, CDM comparison against Space-Track), or when Phase 4 performance optimisation begins.*
