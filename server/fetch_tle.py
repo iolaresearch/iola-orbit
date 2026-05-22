@@ -46,6 +46,7 @@ treated as a silent skip — the existing catalog remains valid.
 import os
 import httpx
 from dotenv import load_dotenv
+from propagate import reset_sgp4_error_log
 
 load_dotenv()
 
@@ -148,3 +149,4 @@ def fetch_tle():
         len([l for l in raw_tle_text.strip().splitlines() if l.strip()]) // 3
     )
     print(f"TLE catalog refreshed: {satellite_count} satellites")
+    reset_sgp4_error_log()

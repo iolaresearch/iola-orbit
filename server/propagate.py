@@ -102,6 +102,29 @@ MEO_MAX_ALTITUDE_KM = 35786.0
 # -----------------------------------------------------------------------
 MIN_VALID_SATELLITE_COUNT = 1000
 
+# -----------------------------------------------------------------------
+# Persistent SGP4 error suppression.
+# Tracks NORADs that have already logged an error in the current session.
+# Prevents known-bad catalog entries (decayed objects, corrupted TLEs)
+# from flooding the log with identical lines on every 15-second cycle.
+# Reset by reset_sgp4_error_log() after each TLE catalog refresh so
+# errors from a fresh catalog are always visible.
+# -----------------------------------------------------------------------
+_sgp4_errors_logged = set()
+
+SGP4_ERROR_DESCRIPTIONS = {
+    1: "mean elements (epoch to osculating) conversion failed",
+    2: "mean motion zero or negative",
+    3: "orbit perturbed elements — eccentricity >= 1.0 or < -0.001",
+    4: "semi-latus rectum zero or negative",
+    5: "epoch too old (> 1 year from epoch)",
+    6: "orbit decayed: manned flight safety range exceeded (too close to Earth)",
+}
+
+def reset_sgp4_error_log():
+    """Clear the suppression set after a TLE refresh."""
+    _sgp4_errors_logged.clear()
+
 
 def _sun_position_eci(julian_date, julian_date_fraction):
     """
@@ -284,7 +307,16 @@ def propagate_satellites():
             )
 
             if sgp4_error != 0:
-                print(f"SGP4 error code {sgp4_error} for NORAD {norad_id} — skipped")
+                error_key = (norad_id, sgp4_error)
+                if error_key not in _sgp4_errors_logged:
+                    description = SGP4_ERROR_DESCRIPTIONS.get(
+                        sgp4_error, "unknown error"
+                    )
+                    print(
+                        f"SGP4 error {sgp4_error} for NORAD {norad_id} "
+                        f"({description}) — skipped, suppressing further repeats"
+                    )
+                    _sgp4_errors_logged.add(error_key)
                 continue
 
             orbital_radius_km = math.sqrt(
