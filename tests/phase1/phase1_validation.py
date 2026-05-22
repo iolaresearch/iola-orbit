@@ -554,21 +554,24 @@ def test_4_propagation_health(satellites):
     # 4.4 — GPS constellation altitude (MEO, GPS shell)
     # GPS IIR, IIR-M, IIF, III satellites cluster at 20,200 km +/- 100 km.
     # -----------------------------------------------------------------------
+    # Filter to active-generation GPS only: IIR, IIR-M, IIF, III.
+    # Excludes decommissioned NAVSTAR/GPS legacy birds at non-operational altitudes
+    # which cause catalog-version-dependent test failures (catalog varies daily).
     gps_sats = [
         s for s in meo_sats
-        if "GPS" in s.get("name", "").upper() or "NAVSTAR" in s.get("name", "").upper()
+        if any(gen in s.get("name", "").upper()
+               for gen in ("GPS IIR", "GPS IIF", "GPS III", "GPS BIIR", "GPS BIIF"))
     ]
     if gps_sats:
         gps_alt_ok_count = sum(
             1 for s in gps_sats
             if 20100 <= s.get("altitude_km", 0) <= 20300
         )
-        # Allow 50% outside range — the TLE catalog labels some decommissioned GPS
-        # satellites (NAVSTAR legacy) which are at non-operational altitudes.
-        gps_clustering_ok = gps_alt_ok_count >= len(gps_sats) * 0.50
+        # Active GPS operational shell is 20,100-20,300 km. Require 80% in range.
+        gps_clustering_ok = gps_alt_ok_count >= len(gps_sats) * 0.80
         all_passed        = all_passed and gps_clustering_ok
         print_result(
-            f"GPS altitude clustering (20,200 +/- 100 km, {len(gps_sats)} GPS objects)",
+            f"GPS active constellation altitude (20,200 +/- 100 km, {len(gps_sats)} active GPS)",
             gps_clustering_ok,
             f"{gps_alt_ok_count}/{len(gps_sats)} in range"
         )
