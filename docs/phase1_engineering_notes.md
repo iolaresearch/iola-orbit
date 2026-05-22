@@ -1419,6 +1419,116 @@ The following observations from the validation run are directly relevant to Phas
 
 ---
 
+---
+
+## 20. Architecture Decision — On-Demand Propagation
+
+*Written: 2026-05-22 · Jason Quist + Claude*
+
+### DECISION-006 — Replace 15-second background propagation cache with on-demand propagation per request
+
+**Date:** 2026-05-22  
+**Trigger:** Render production logs showing repeated identical SGP4 error lines; question raised about streaming vs. caching
+
+---
+
+**The problem with the 15-second cache:**
+
+The cache-based architecture had three distinct failure modes that all traced to the same root cause — the API served data computed at a different time than it was requested:
+
+1. **BUG-012** — `clear() + extend()` left an empty-cache window where any request returned `[]`
+2. **Test 1 timing artifact** — test compared ISS position from 35 seconds ago against a fresh reference, producing 275 km apparent error that was not real
+3. **`propagated_at` workaround** — required exposing propagation timestamp in the API so the test could epoch-match, adding architectural complexity to work around a problem that should not exist
+
+All three are eliminated if the propagation runs at the moment of the request.
+
+**The measurement that changed the decision:**
+
+Before deciding to rewrite, the propagation time was measured empirically:
+
+```
+15,428 SGP4 evaluations: 9ms on Render free tier (C extension)
+                         49ms on Windows local Python
+Per-satellite: 0.001ms
+```
+
+9ms per request is negligible. It is smaller than the typical HTTP round-trip overhead. There is no reason to pay 15 seconds of staleness to avoid 9ms of compute.
+
+**Why streaming was not the answer:**
+
+True SSE/WebSocket streaming pushes position updates continuously. Rejected previously for bandwidth: 180 KB/s per client × 86,400 s/day = 15 GB/day per client. That constraint still holds. On-demand propagation (9ms per GET request) solves the staleness without streaming cost.
+
+**New architecture:**
+
+```
+On startup:
+  load_tle_from_disk()    — parse seed active.tle into state.satrec_catalog
+  fetch_tle()             — fetch fresh catalog, re-parse, replace catalog
+
+Background (single thread):
+  fetch_tle() every 7200s — re-fetches, re-parses, replaces catalog
+
+On every GET /satellites:
+  propagate_satellites()  — evaluates all Satrec objects to datetime.now()
+                            returns {propagated_at, satellites}
+                            ~9ms, zero staleness
+```
+
+**What was removed:**
+
+- `_propagation_loop()` background thread (propagation every 15 seconds) — deleted
+- `state.satellite_cache` — deleted (replaced by `state.satrec_catalog`)
+- `state.last_propagated_at` — deleted (propagated_at is now computed fresh on each response)
+- `propagate_satellites()` call from `main.py` at startup — replaced by `load_tle_from_disk()`
+- `_epoch_to_iso()` from `propagate.py` — moved to `fetch_tle.py` where it belongs
+
+**What was added:**
+
+- `state.satrec_catalog` — list of parsed `{name, norad_id, epoch, satrec, bstar, tle_line1, tle_line2}` entries, populated on each TLE refresh
+- `fetch_tle._parse_catalog_into_satrecs()` — parses TLE strings into Satrec objects once per refresh
+- `fetch_tle.load_tle_from_disk()` — parses the seed `active.tle` at startup without a network call, ensuring the API serves data immediately on boot
+- `tle_line1` / `tle_line2` stored in catalog entries — preserved for Phase 2 TCA refinement via SGP4 bisection in `conjunction.py`
+
+**Separation of responsibilities (final):**
+
+| File | Responsibility |
+|---|---|
+| `fetch_tle.py` | TLE acquisition, validation, disk write, Satrec parsing |
+| `state.py` | `satrec_catalog` — the single shared parsed catalog |
+| `propagate.py` | On-demand SGP4 evaluation, sun position, shadow model |
+| `api.py` | HTTP routing, CORS, calls `propagate_satellites()` per request |
+| `main.py` | Startup sequencing, single background refresh thread |
+
+---
+
+## 21. SGP4 Error Catalog — Persistent Failing Objects (2026-05-22)
+
+*Written: 2026-05-22 · Jason Quist + Claude*
+
+Four NORAD IDs fail on every propagation cycle. Logged here for the record and for Phase 2 awareness.
+
+| NORAD | Error code | Meaning | Cause |
+|---|---|---|---|
+| 46564 | 6 | Orbit decayed: too close to Earth | Object has re-entered atmosphere. CelesTrak catalog lags real-world reentry. Will be removed from active catalog on next CelesTrak update. |
+| 66910 | 6 | Orbit decayed: too close to Earth | Same as above. |
+| 57437 | 1 | Mean elements conversion failed | TLE elements are mathematically corrupted or the orbit is in a degenerate state. Will fail regardless of TLE age. |
+| 68667 | 1 | Mean elements conversion failed | Same as above. |
+
+**Max TLE age before error 6 appears:**
+
+There is no fixed threshold. It depends entirely on the object:
+- Stable GEO with bstar ≈ 0: TLE valid for months, never triggers error 6
+- Actively decaying LEO at 200 km with high bstar: error 6 can appear within 2-3 days of the last update
+- Already re-entered object: triggers error 6 immediately on any propagation call
+
+The catalog lags reality. CelesTrak updates the active catalog from USSPACECOM tracking data. A re-entered object may remain in the catalog for hours to days after actual reentry.
+
+**Fix implemented:** The SGP4 error suppression log (`_sgp4_errors_logged` in `propagate.py`) logs each (norad_id, error_code) pair exactly once per TLE refresh cycle, then suppresses repeats. This eliminates 12 identical log lines per minute for these 4 objects without hiding real errors from new objects.
+
+**Phase 2 implication:** The conjunction engine must handle the case where a NORAD ID present in the catalog at the start of a conjunction assessment run produces a propagation error mid-run. A satellite can disappear from the propagation output between the catalog refresh (every 2 hours) and the conjunction computation. Phase 2 must not assume the NORAD IDs it starts with will all produce valid propagation results.
+
+---
+
 *Document last updated: 2026-05-22*  
 *Signed: Jason Quist (Founder & CEO) · Claude (Chief Research Scientist / Systems Architect)*  
-*Next update: After Render deploys commit 751e9e5 and Test 1 re-run confirms < 3 km delta with epoch-matched propagation.*
+*Next update: After Render redeploys and Test 1 re-run confirms < 3 km delta with on-demand propagation.*

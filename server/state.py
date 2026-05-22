@@ -1,38 +1,50 @@
 """
 IKIRERE ORBITAL LABS AFRICA — PHASE 1
-Shared Orbital State Cache
+Shared Orbital State
 
 =======================================================================
 PURPOSE
 =======================================================================
-Single shared list that decouples the propagation engine from the API.
+Holds the parsed Satrec objects and satellite metadata parsed from
+the TLE catalog. Shared between fetch_tle.py (writes) and api.py
+(reads).
 
-Write path:  propagate.py  → replaces satellite_cache contents atomically
-Read path:   api.py        → returns satellite_cache on GET /satellites
-
-=======================================================================
-WRITE ATOMICITY
-=======================================================================
-The write uses slice assignment:
-
-    satellite_cache[:] = new_list
-
-This mutates the existing list object in place rather than replacing
-the reference. CPython executes list slice assignment as a single
-C-level operation under the GIL, making it atomic for our single-
-process use case. There is no window where the cache is empty.
-
-The previous pattern (clear() + extend()) had a window between the
-two calls where any API request would return an empty list. That
-pattern was replaced on 2026-05-22. See phase1_engineering_notes.md,
-BUG-012 / Q3 resolution.
+Architecture (on-demand propagation):
+  - fetch_tle.py parses the TLE catalog into Satrec objects on each
+    successful refresh and stores them here.
+  - api.py reads satrec_catalog and propagates every satellite to
+    datetime.now() on each GET /satellites request.
+  - No background propagation thread. No cache staleness. No 15-second
+    delay. Positions are always exact for the moment of the request.
 
 =======================================================================
-FUTURE MIGRATION
+WHY THIS REPLACED THE CACHE APPROACH
 =======================================================================
-When the platform scales to multiple workers, replace with a Redis
-cache. Only this file and the two import sites change.
+The previous architecture maintained a satellite_cache list that was
+refreshed every 15 seconds by a background thread. This introduced:
+  - Cache staleness (up to 15s + network latency = stale positions)
+  - BUG-012: clear() + extend() empty-cache window
+  - Test 1 timing artifact (comparing positions from different epochs)
+  - propagated_at complexity to work around the staleness
+
+Profiling showed 15,000 SGP4 evaluations take 9ms on the Render
+free tier. On-demand propagation per request costs 9ms of latency.
+This is a better trade than 15 seconds of position staleness.
+
+The TLE parsing (Satrec.twoline2rv) is the expensive part — it parses
+orbital element strings into numeric structures. This happens once per
+TLE refresh (every 2 hours), not once per request. Each request then
+runs only the 9ms evaluation loop.
+
+=======================================================================
+THREAD SAFETY
+=======================================================================
+satrec_catalog is replaced atomically via slice assignment on refresh.
+api.py reads it under a consistent snapshot since the list replacement
+is a single C-level operation under the CPython GIL.
 """
 
-satellite_cache    = []
-last_propagated_at = None   # ISO 8601 UTC string, set by propagate.py on each run
+# List of dicts: {name, norad_id, tle_line1, tle_line2, satrec, bstar, epoch}
+# Populated by fetch_tle.py after each successful TLE refresh.
+# Read by api.py on every GET /satellites request.
+satrec_catalog = []

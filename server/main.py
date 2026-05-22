@@ -3,37 +3,24 @@ IKIRERE ORBITAL LABS AFRICA — PHASE 1
 Service Startup and Thread Orchestration
 
 =======================================================================
-PURPOSE
+STARTUP ORDER
 =======================================================================
-Defines startup order and background thread lifecycle for the Phase 1
-orbital simulation service.
+  1. load_tle_from_disk()  — parse seed active.tle into satrec_catalog
+  2. fetch_tle()           — fetch fresh catalog from CelesTrak,
+                             re-parse and replace satrec_catalog
+  3. Start TLE refresh thread — re-fetches and re-parses every 2 hours
+  4. Start uvicorn         — API is now safe to serve requests
+
+There is no propagation thread. Propagation runs on-demand inside
+GET /satellites (9ms per call). Zero staleness. No background state.
 
 =======================================================================
-STARTUP ORDER (critical — do not change)
+TLE REFRESH THREAD
 =======================================================================
-  1. fetch_tle()           — populate active.tle before any propagation
-  2. propagate_satellites() — populate satellite cache before API starts
-  3. Start propagation thread — updates cache every 15 seconds
-  4. Start TLE refresh thread — refreshes catalog every 2 hours
-  5. Start uvicorn          — API is now safe to serve requests
-
-The API must never be exposed before step 2 completes. A request
-arriving before propagation would return an empty satellite list.
-
-=======================================================================
-THREAD DESIGN
-=======================================================================
-Both threads sleep FIRST, then execute. The initial state comes from
-the synchronous calls in steps 1 and 2 above. This avoids a double
-propagation on startup and ensures the sleep interval is measured from
-after each operation completes, not from when the thread was created.
-
-The TLE refresh thread calls propagate_satellites() immediately after
-a successful fetch so the cache reflects the new catalog within seconds
-rather than waiting for the next propagation tick.
-
-Both threads are daemon threads — they are killed automatically when
-the main process exits. No cleanup is required.
+Sleeps 7200s (2 hours) then fetches, validates, writes to disk,
+parses into Satrec objects, and replaces state.satrec_catalog.
+The sleep-first pattern means the interval is measured from after
+each operation completes, not from thread creation time.
 """
 
 import os
@@ -41,45 +28,30 @@ import time
 import threading
 import uvicorn
 from api import app
-from fetch_tle import fetch_tle
-from propagate import propagate_satellites
+from fetch_tle import fetch_tle, load_tle_from_disk
 
-PROPAGATION_INTERVAL_SECONDS = 15
-TLE_REFRESH_INTERVAL_SECONDS  = 7200   # 2 hours
-
-
-def _propagation_loop():
-    """Background thread: propagate all satellites every 15 seconds."""
-    while True:
-        time.sleep(PROPAGATION_INTERVAL_SECONDS)
-        propagate_satellites()
+TLE_REFRESH_INTERVAL_SECONDS = 7200   # 2 hours
 
 
 def _tle_refresh_loop():
-    """
-    Background thread: refresh TLE catalog every 2 hours.
-    Immediately re-propagates after a successful refresh so the cache
-    reflects the new orbital elements without waiting for the next tick.
-    """
+    """Background thread: refresh and re-parse TLE catalog every 2 hours."""
     while True:
         time.sleep(TLE_REFRESH_INTERVAL_SECONDS)
         fetch_tle()
-        propagate_satellites()
 
 
 # -----------------------------------------------------------------------
-# Synchronous initialisation — must complete before threads start
+# Synchronous initialisation
 # -----------------------------------------------------------------------
-fetch_tle()
-propagate_satellites()
+load_tle_from_disk()   # parse seed file immediately — API can serve at once
+fetch_tle()            # fetch fresh catalog from CelesTrak, replace if valid
 
 # -----------------------------------------------------------------------
-# Background threads
+# Background thread
 # -----------------------------------------------------------------------
-threading.Thread(target=_propagation_loop, daemon=True).start()
-threading.Thread(target=_tle_refresh_loop,  daemon=True).start()
+threading.Thread(target=_tle_refresh_loop, daemon=True).start()
 
 # -----------------------------------------------------------------------
-# API server — started last, after cache is populated
+# API server
 # -----------------------------------------------------------------------
 uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))

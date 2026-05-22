@@ -7,22 +7,34 @@ PURPOSE
 =======================================================================
 Exposes the Phase 1 orbital state to two distinct consumers:
 
-  GET /tles       → Raw TLE catalog (plain text)
+  GET /tles       -> Raw TLE catalog (plain text)
                     Consumed by the frontend visualization layer.
                     The client runs satellite.js SGP4 locally for
                     exact real-time display positions.
 
-  GET /satellites → Propagated orbital state (JSON)
+  GET /satellites -> Propagated orbital state (JSON)
                     Consumed by research tools, Phase 2 conjunction
                     engine, and future API customers.
-                    Positions are accurate to the last propagation
-                    cycle (every 15 seconds).
+                    Positions are computed on-demand for the exact
+                    UTC moment of the request. Zero staleness.
+
+=======================================================================
+ON-DEMAND PROPAGATION
+=======================================================================
+propagate_satellites() is called on every GET /satellites request.
+It evaluates all 15,000+ Satrec objects against datetime.now().
+Measured cost: ~9ms on Render free tier.
+
+This replaced the 15-second background cache cycle which introduced:
+  - Up to 15s + network latency of position staleness
+  - BUG-012: empty-cache window between clear() and extend()
+  - Test 1 timing artifact requiring propagated_at workaround
 
 =======================================================================
 CORS POLICY
 =======================================================================
-Restricted to known origins only. No wildcard. Adding a new origin
-requires an explicit entry here — not a configuration change.
+Restricted to known origins only. No wildcard. New origins require
+an explicit code change, not a configuration change.
 
 =======================================================================
 ALLOWED METHODS
@@ -34,7 +46,7 @@ No mutation endpoints exist in Phase 1.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
-import state
+from propagate import propagate_satellites
 
 app = FastAPI()
 
@@ -65,11 +77,7 @@ def get_raw_tle_catalog():
 @app.get("/satellites")
 def get_propagated_satellite_state():
     """
-    Return the current propagated orbital state for all satellites.
-    Includes propagated_at — the UTC timestamp of the last propagation
-    run — so consumers can epoch-match their own reference computations.
+    Propagate all satellites to datetime.now() and return the result.
+    propagated_at in the response is the exact UTC second of this call.
     """
-    return {
-        "propagated_at": state.last_propagated_at,
-        "satellites":    state.satellite_cache,
-    }
+    return propagate_satellites()
