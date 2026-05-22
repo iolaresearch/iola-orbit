@@ -114,7 +114,7 @@ except ImportError:
 # -----------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------
-API_URL          = os.getenv("API_URL", "https://iola-orbit.onrender.com")
+API_URL          = os.getenv("API_URL", "https://iola-orbit-dfxp.onrender.com")
 SATELLITES_URL   = f"{API_URL}/satellites"
 TLE_URL          = f"{API_URL}/tles"
 
