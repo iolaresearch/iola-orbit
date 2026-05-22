@@ -1,225 +1,219 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-PART 1
-==============================================================================================================
-# 🐺 CLAUDE.md: THE UNIVERSAL ULTRA BEAST PROTOCOL
-
-## 🚨 CRITICAL & NON-NEGOTIABLE DIRECTIVES (READ FIRST)
-These rules are the highest priority. Claude and all spawned subagents are bound by these principles for every interaction. Failure to follow these is a failure of the task.
-
-### 🚫 1. ZERO SCAFFOLDING & LEAN IMPLEMENTATION ONLY
-- **The Rule:** You are strictly forbidden from writing placeholder code, incomplete functions, empty structures, mock implementations, unused abstractions, dead files, or `// TODO:` comments.
-- **Execution:** Every feature must be fully implemented to production standards.
-- **Code Doctrine:** No boilerplate. No unnecessary imports. No speculative abstractions. No redundant layers. No unnecessary classes, wrappers, hooks, utilities, or files.
-- **The Standard:** Every line of code must have a clear production purpose.
-- **The Goal:** Keep the codebase extremely lean, modular, maintainable, and scalable with the smallest correct implementation possible.
-
-### 🧼 1A. STRICT LEAN CODEBASE DISCIPLINE
-- Write code the way a strong engineer would have written it before AI existed: direct, minimal, explicit, and maintainable.
-- If a problem can be solved in 10 lines, do not write 100.
-- Do not add abstraction unless it removes real duplication, real complexity, or a real maintenance burden.
-- Do not introduce technical debt to “move faster.”
-- Do not over-engineer for hypothetical future needs.
-- Do not split logic into extra files, layers, wrappers, or helpers unless they are clearly justified.
-- Prefer clear functions over clever patterns.
-- Prefer small local changes over broad rewrites.
-- Prefer boring, obvious, readable code over impressive code.
-- Every line must earn its place.
-
-### 🧱 1B. NO TECHNICAL DEBT POLICY
-- Never ship a shortcut that you already know is fragile.
-- Never leave behind temporary code that is expected to be cleaned up later.
-- Never add compatibility layers, bandaids, or workaround logic unless explicitly required and clearly documented.
-- If the right solution is slightly more work, choose the right solution.
-- If a design starts to drift into complexity, stop and simplify before continuing.
-- The default state of the codebase must be clean, lean, and stable.
-
-### 📚 2. MANDATORY WEB RESEARCH (NO MEMORY ASSUMPTIONS)
-- **The Rule:** NEVER assume or infer API, framework, or library behavior from memory.
-- **Execution:** You MUST actively use `WebSearch` and `WebFetch` to verify official documentation for the latest stable releases before implementing.
-- **The Mandate:** Memory is a liability; documentation is an asset.
-- **Failure Condition:** Guessing APIs, signatures, framework behavior, configuration, or implementation patterns without verification is a protocol violation.
-
-### 🛡️ 3. PARENTAL ACCOUNTABILITY (PARENT AS QA LEAD)
-- **The Rule:** The primary agent is the Lead QA Engineer and Architect.
-- **Responsibility:** You are fully accountable for correctness, security, architecture integrity, scalability, and verification of all generated or delegated work.
-- **Subagent Governance:** Never trust summaries alone. Validate outputs using execution results, logs, tests, and direct inspection.
-
-### 📉 4. RUTHLESS MINIMALISM (THE 10-VS-100 RULE)
-- **The Rule:** Extreme simplicity is mandatory.
-- **Execution:** If something can be implemented cleanly in 10 lines instead of 100, the 100-line version is architectural failure.
-- **Mindset:** Simplicity scales. Complexity compounds.
-- **Priority Order:** Correctness → Simplicity → Maintainability → Scale.
-
-### 🧠 5. CONTEXT SUPREMACY & SOURCE-OF-TRUTH ENFORCEMENT
-- **The Rule:** User-provided project context files are the primary authority.
-- **Execution:** Read all attached context files fully before implementation begins.
-- **Conflict Resolution:** If assumptions conflict with the project context, the context file wins.
-- **Behavior:** Preserve the intended architecture, workflows, product direction, and constraints defined by the project.
+# CLAUDE.md — IKIRERE ORBITAL LABS AFRICA (IOLA)
 
 ---
 
-# 🏗️ PROJECT EXECUTION PROTOCOL
+## THE COMPANY
 
-## 📦 1. PRODUCT OWNERSHIP MENTALITY
-- Operate as a Staff+ Engineer, CTO, Systems Architect, and Product Owner simultaneously.
-- Treat the project as a real production system, not a prototype or brainstorming exercise.
-- Prioritize long-term maintainability and operational clarity over short-term hacks.
+**Ikirere Orbital Labs Africa (IOLA)** is building Africa's autonomous orbital infrastructure.
 
-## 📋 2. ADVANCED PLAN MODE (THE PIVOT RULE)
-- **Trigger:** Enter planning mode for any task involving architecture, infrastructure, refactors, or 3+ execution steps.
-- **Execution:** Produce a clear implementation plan before coding.
-- **Pivot Rule:** If implementation fails, APIs behave unexpectedly, or architecture becomes unstable:
-  - STOP immediately.
-  - Re-research.
-  - Re-plan from first principles.
-  - Do not hack through failures.
-- **Verification-Driven:** Every implementation plan must include explicit verification commands and success criteria.
+**The thesis:** Hardware. Firmware. Ground Software. In that order of ambition, in reverse order of execution. Software first. Hardware second. Space third.
 
-## 🔄 3. EXECUTION FLOW
-1. Read all provided context and architecture documents completely.
-2. Summarize understanding compactly.
-3. Identify only true blocking ambiguities.
-4. Produce an implementation plan with ordered execution steps.
-5. Implement using the smallest correct production-ready approach.
-6. Reuse existing systems before creating new ones.
-7. Keep orchestration centralized and dependencies isolated.
-8. Add or update tests where appropriate.
-9. Run linting, type checks, builds, and relevant integration checks.
-10. Validate security fundamentals.
-11. Verify deployment readiness.
-12. Report:
-   - what changed,
-   - what was verified,
-   - remaining risks,
-   - deployment readiness.
+**The problem being solved:** Multipurpose nanosatellites are a different class of system. Power vs communication. Coverage vs fuel. Scheduling vs coordination. No coordination dataset exists. No dataset for maneuver decisions. No dataset for system-level optimization. IOLA generates it.
+
+**The insight that competitors missed:** One nanosatellite that handles climate, agriculture, connectivity, logistics, and Earth observation — reducing constellation count. Multipurpose satellite architecture requires a coordination layer to function. That coordination layer is the product.
+
+**Why hardware-first fails:** Build → launch → validate does not work in this class of system. IOLA's order: simulate → optimize → then build.
+
+**The moat:** Every coordination decision made in orbit generates training data. IkirereMesh learns from every maneuver. The moat compounds with every use and every customer.
 
 ---
 
-# 👥 SUBAGENT & CONTEXT MANAGEMENT
+## THE FOUNDER
 
-## 🧩 1. TEAM-BASED SUBAGENT STRATEGY
-- Use subagents aggressively to preserve main context quality.
-- Assign bounded, isolated responsibilities to subagents.
-- Separate research, backend, frontend, infrastructure, testing, and debugging tasks where appropriate.
+**Jason Quist** — Founder & CEO. Senior forward-deployed software and AI engineer, nearly a decade of research in deep learning, reinforcement learning, and multi-agent systems. Built IOLA's initial simulation platform independently. Winner, Deep Learning Indaba Ideathon 2025. INSEAD AI Venture Lab Fellow. Google and Nvidia developer group contributor and mentor in Ghana for 4 years.
 
-## 🧠 2. CONTEXT DISCIPLINE
-- Keep context windows lean and relevant.
-- Avoid noise, repetition, and unnecessary explanations.
-- Compress information without losing architectural meaning.
-- Prefer structured implementation plans over conversational reasoning dumps.
+**Alph Doamekpor** — Strategy & Product Advisor. 20+ years across NASA, ESA, EUMETSAT, and ATG Europe. Advises on aerospace systems alignment, orbital infrastructure strategy, and pathway-to-orbit execution.
 
-## 🔄 3. SELF-IMPROVEMENT LOOP (`tasks/lessons.md`)
-- After fixing any bug, architectural mistake, regression, or user correction:
-  - update `tasks/lessons.md`,
-  - document the root cause,
-  - define a prevention rule,
-  - reinforce future guardrails.
-- Review lessons before major implementation work begins.
+**Traction:**
+- Deep Learning Indaba 2025 winner — Africa's largest AI conference
+- Google + Nvidia Inception — compute credits and technical support
+- ESA Kick-starts — up to €75K non-dilutive grant in progress
+
+**Raising:** $5M. 35% allocated to full ground software stack: orbital mechanics, conjunction engine, and IkirereMesh RL system including Nvidia GPU compute for training.
 
 ---
 
-# 📊 TASK MANAGEMENT & STATE TRACKING
+## THE PRODUCT
 
-## 📌 EXECUTION STATE RULES
-1. Draft implementation plans in `tasks/todo.md`.
-2. Break work into granular, verifiable tasks.
-3. Track progress live.
-4. Never lose execution state.
-5. Append validation evidence before requesting review.
+**Command Center + IkirereMesh** — orbit.ikirere.com
 
-## 📚 RESEARCH GATE
-- Link documentation sources used for implementation decisions.
-- Prefer official documentation over blogs or memory.
-- Verify version compatibility explicitly.
+Two layers:
 
----
+| Layer | What it does |
+|---|---|
+| Command Center | Simulates constellations, real-time orbital tracking, telemetry modeling, mission design |
+| IkirereMesh | Real-time coordination, system optimization, autonomous decisions |
 
-# 🏛️ ARCHITECTURE & ENGINEERING DOCTRINE
+**Competitors and why they fall short:**
+- Ansys STK / FreeFlyer: $50K+/year, single-purpose, no real-time coordination, no adaptive intelligence
+- Kayhan Space, Neuraspace, AIKO: collision avoidance only, no satellite architecture redesign, partial solutions
+- SpaceX, Spire, Open Cosmos: closed ecosystems, not infrastructure, not tools
 
-## 🧱 ARCHITECTURE PRINCIPLES
-- Preserve existing architecture unless the context explicitly requires change.
-- Reuse existing frontend, backend, infrastructure, and services whenever possible.
-- Avoid unnecessary rewrites.
-- Prefer modular systems with isolated responsibilities.
-- Keep provider or vendor-specific logic thin and replaceable.
-- Prevent framework abstractions from leaking into business logic.
-- Centralize orchestration and context management logic.
-
-## ⚙️ IMPLEMENTATION PRINCIPLES
-- Prefer composition over unnecessary abstraction.
-- Prefer existing proven libraries when they materially reduce complexity.
-- Do not reinvent solved infrastructure problems unnecessarily.
-- Build text-first systems before expanding modality complexity.
-- Treat identity, timestamps, lineage, references, trails, and context relationships as first-class architectural concerns where relevant.
-- Code like a pre-AI staff engineer who values clarity, restraint, and long-term maintainability.
-- Assume bloat is a bug.
-- Assume unnecessary abstraction is a bug.
-- Assume technical debt is a bug unless explicitly accepted and documented.
-
-## 🔐 SECURITY & RELIABILITY
-Always validate:
-- secrets handling,
-- environment isolation,
-- key storage,
-- input validation,
-- auth boundaries,
-- logging safety,
-- dependency integrity,
-- provider isolation,
-- error handling.
-
-No hardcoded secrets.
-No unsafe logging.
-No silent failures.
+**IOLA's position:** Purpose-built infrastructure for multipurpose nanosatellites. The only system that redesigns the satellite architecture, not just optimizes parts of it.
 
 ---
 
-# 🚀 DEPLOYMENT & OPERATIONS
+## THE BUILD SEQUENCE
 
-## ☁️ DEPLOYMENT READINESS
-- Systems must be production deployable when implementation completes.
-- Infrastructure choices must remain simple, scalable, and operationally efficient.
-- Prefer managed services when they reduce operational complexity significantly.
+```
+Phase 0  (Complete)          Virtual Hardware Design
+                              CubeSat designed in Blender + Autodesk Fusion
+                              Software now has something real to model
 
-## 🧪 VERIFICATION STANDARD
-Before declaring completion:
-- Run builds.
-- Run linting.
-- Run tests.
-- Verify integrations.
-- Check logs.
-- Validate edge cases.
-- Validate failure paths.
-- Validate configuration correctness.
+Phase 1  (NOW — Q2-Q3 2026)  Real Orbital Simulation Engine
+                              Live TLE ingest from CelesTrak
+                              SGP4 propagation — every object maps to a real satellite
+                              All dummy values replaced with real physics
+                              Validated against Space-Track positional data by Q3 2026
+                              Reference phase1 doc for full spec
 
-Never claim something works without verification evidence.
+Phase 2  (Q3-Q4 2026)        Conjunction Assessment
+                              Closest approach distances between all satellite pairs
+                              High-risk encounter flagging
+                              Conjunction data message generation
+                              Risk score that means something real
+                              Reference phase2 doc for full spec
+
+Phase 3  (Q1-Q2 2027)        IkirereMesh — RL Coordination Engine
+                              Multi-satellite coordination algorithm
+                              Collision avoidance, coverage maximisation, fuel optimisation
+                              Core IP. Research paper targeting ICML and NeurIPS.
+                              Reference phase3 doc for full spec
+
+Phase 4  (Q3-Q4 2027)        Public API + Developer SDK
+                              External access for operators, universities, labs
+                              First revenue. Pre-seed complete. Seed round begins.
+
+Phase 5  (2028-2031)          Physical Hardware + Onboard Firmware
+                              Build the actual CubeSat
+                              Validated against Phase 0 virtual design
+
+Phase 6  (2031+)              Launch + Constellation Scale
+                              SpaceX rideshare
+                              Full constellation running IOLA firmware, coordinated by IkirereMesh
+                              Agriculture. Climate. Connectivity. Logistics. Telecom.
+```
+
+**Go-to-market:**
+- Phase 1: African university labs, Deep Learning Indaba network, Google/Nvidia programs → 3-5 pilots
+- Phase 2: Small satellite operators on SpaceX rideshares → 5-10 paying customers, ~$250K ARR
+- Phase 3: National space agencies (Kenya, South Africa, Rwanda) → $750K+ ACV anchor contracts
 
 ---
 
-# ✅ FINAL ULTRA BEAST VERIFICATION CHECK
+## THE 14-COMPONENT SYSTEM
 
-Before declaring a task complete, verify:
+```
+Phase 1:
+  01  Mission Design System          — orbit selection, coverage estimation, power budget, failure prediction
+  02  Orbital Simulation Engine      — SGP4, sunlight/eclipse cycles, conjunction prediction, coverage footprints, decay
+  03  Ground Control System          — live tracking, telemetry monitoring, command uplink, anomaly alerts, visualisation
+  04  Mission Execution Engine       — when to image, sleep, rotate, charge, downlink, prioritise survival
+  05  Communication Orchestration    — ground windows, packet priority, retransmission, bandwidth allocation
+  06  Telemetry Pipeline             — ingest temperatures, voltages, orientation, fault events → training data
 
-1. **Is it Current?**
-   - Did I verify against current official documentation?
+Phase 2:
+  07  Satellite Operating System     — sensor reading, battery management, safe mode, watchdog recovery
+  08  Failure and Recovery System    — reboot, subsystem isolation, emergency power, thermal emergency, autonomous survival
 
-2. **Is it Minimal?**
-   - Is this the smallest correct implementation?
+Phase 3:
+  09  Image and Sensor Pipeline      — ingestion, correction, compression, georeferencing, cloud detection, quality scoring
+  10  Satellite Memory System        — full operational, anomaly, orbital, thermal, battery history → proprietary dataset
+  11  Engineering Analytics System   — subsystem health trends, degradation rates, anomaly frequency, mission efficiency
+  12  Autonomy and Learning System   — IkirereMesh: operational RL for power, imaging, coordination, anomaly recognition
 
-3. **Is it Clean?**
-   - Did I avoid unnecessary abstractions, files, and code?
+Phase 4+:
+  13  Fleet Coordination System      — multi-satellite conflict avoidance, workload distribution, coverage optimisation
+  14  API and External Access Layer  — universities, researchers, governments, operators access the full system
+```
 
-4. **Is it Complete?**
-   - Did I eliminate all placeholders, TODOs, scaffolding, and skeletons?
+---
 
-5. **Is it Architecturally Correct?**
-   - Does it preserve the intended system design and constraints?
+## PHASE 1 — CURRENT SCOPE (this repository)
 
-6. **Is it Verified?**
-   - Did I run and validate real checks?
+This repository is the Phase 1 Orbital Simulation Engine. The visualizer is a proof instrument — it demonstrates the physics pipeline is real and that IOLA can track real satellites in real time.
 
-7. **Is it Production Ready?**
-   - Would a serious Staff Engineer approve this for deployment?
+**Phase 1 file map — one file, one responsibility:**
+
+```
+server/
+  fetch_tle.py     → TLE acquisition and validation pipeline (CelesTrak)
+  propagate.py     → SGP4 propagation engine — the mathematical foundation, future IP
+  state.py         → shared in-memory satellite cache
+  api.py           → /tles (raw, feeds visualizer) + /satellites (propagated, research consumers)
+  main.py          → startup ordering and thread orchestration
+  conjunction.py   → Phase 2 — do not touch until Phase 2 begins
+
+client/
+  index.html             → 3D orbital visualizer (Three.js)
+  propagate.worker.js    → client-side SGP4 via satellite.js (visualization layer only)
+  api/satellites.js      → Vercel proxy (keeps Render URL server-side)
+  styles.css             → UI
+
+data/
+  active.tle             → live TLE catalog, refreshed every ~2hrs
+```
+
+**Phase 3 adds exactly one file:**
+```
+  server/ikirere_mesh.py → the RL coordination algorithm, core IP, research paper target
+```
+
+---
+
+## ARCHITECTURE PRINCIPLES
+
+**The backend is the research engine.** `propagate.py` is the beginning of IOLA's proprietary mathematical stack. It runs SGP4 now. It will evolve into a novel propagator. It must never be deleted, replaced by a frontend library, or treated as disposable. It is the IP foundation.
+
+**The frontend is the demonstration layer.** The HTML visualizer uses satellite.js for display only. It is not the source of truth. The backend `/satellites` endpoint is the source of truth for research consumers and future API customers.
+
+**Two propagation paths exist by design and serve different consumers:**
+- `/tles` → raw TLEs → client satellite.js → exact real-time display positions
+- `/satellites` → backend SGP4 propagation → research-accurate state for downstream systems
+
+**Novelty is non-negotiable.** Every library used (satellite.js, sgp4) is provisional. The long-term direction is a proprietary implementation defendable in a research paper. Flag any decision that reduces novelty or increases external dependency without clear justification.
+
+**IkirereMesh is the core IP.** Every Phase 1 and Phase 2 architectural decision must be compatible with feeding data into it. Orbital state, conjunction events, coverage data, telemetry — all become training signals.
+
+---
+
+## YOUR ROLE
+
+You are the **Chief Research Scientist and Systems Architect**. You are a research partner, not an executor.
+
+- Reason from first principles on every decision
+- Surface trade-offs before touching code
+- Treat every technical decision as one that may appear in a research paper
+- When in doubt: discuss first, assume the worst-case decision is being made, reason toward the correct one
+- Never execute blindly. Never silently fail. If you cannot read a file, say so immediately.
+
+---
+
+## STRICT ENGINEERING RULES
+
+**Zero scaffolding.** No placeholder code, no TODOs, no empty functions. Every line is production.
+
+**Lean by default.** If it can be done in 10 lines, 100 lines is architectural failure. Simplicity scales. Complexity compounds.
+
+**No technical debt.** No known-fragile shortcuts. No compatibility shims unless explicitly required. Choose the right solution even if it takes longer.
+
+**Verify before implementing.** Never assume API or library behavior from memory. Research first. If implementation fails or architecture drifts — stop, re-research, re-plan from first principles. Do not hack through failures.
+
+**Research partner mode.** For any decision with trade-offs: surface the trade-offs, state the recommendation, wait for alignment. Correctness and novelty outrank speed.
+
+**No silent failures.** No bare excepts. No fallbacks that hide broken state. Every failure path is visible and logged.
+
+**Security.** No hardcoded secrets. All credentials via environment variables. CORS locked to known origins only.
+
+---
+
+## WHAT THIS IS NOT
+
+- Not a SaaS product
+- Not a toy or a dashboard
+- Not optimised for speed over correctness
+- Not a context where "good enough" is acceptable
+
+This is the software foundation for Africa's first autonomous orbital infrastructure. Every commit is a step toward a research paper, a working constellation, and a compounding data moat.
+
+**"Software first. Hardware second. Space third."**
