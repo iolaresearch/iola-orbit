@@ -1,22 +1,11 @@
-# Secrets and credentials — never committed
-server/.env
+# Secrets — never committed
 *.env
 *.env.*
 
-# Python
-server/.venv/
-server/__pycache__/
-**/__pycache__/
-*.pyc
-
-# Node
-scripts/node_modules/
-scripts/package-lock.json
-
-# Internal working documents
-prompt
-docs/IOLA/
-docs/CHATGPT_CONVERSATION.TXT
+# Node (Vercel serverless functions dependencies if any)
+node_modules/
+.next/
 
 # Build artifacts
 *.tmp
+.vercel/
