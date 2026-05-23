@@ -1,3 +1,11 @@
-prompt
-IOLA
-scripts/
+# Secrets — never committed
+*.env
+*.env.*
+
+# Node (Vercel serverless functions dependencies if any)
+node_modules/
+.next/
+
+# Build artifacts
+*.tmp
+.vercel/
