@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <link rel="stylesheet" href="./styles.css">
-    <title>IOLA Orbit</title>
+    <title>IOLA Orbit — Command Center</title>
     <script type="importmap">
     {
     "imports": {
@@ -13,10 +13,142 @@
     }
     }
     </script>
+    <style>
+    /* IkirereMesh command center additions */
+    #mesh-panel {
+        position: absolute;
+        bottom: 24px;
+        right: 24px;
+        z-index: 100;
+        width: 280px;
+        background: rgba(0,0,0,0.72);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 6px;
+        padding: 16px;
+        backdrop-filter: blur(16px);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    #mesh-panel .section-title {
+        font-size: 9px;
+        letter-spacing: 0.22em;
+        color: rgba(255,255,255,0.3);
+        margin-bottom: 2px;
+    }
+    .spawn-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+    .spawn-row label { font-size: 10px; color: rgba(255,255,255,0.4); white-space: nowrap; }
+    .spawn-row input[type=number] {
+        width: 48px; padding: 4px 6px;
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 3px; color: #fff;
+        font-family: inherit; font-size: 11px; text-align: center;
+    }
+    #spawn-btn {
+        flex: 1; padding: 7px 0;
+        background: rgba(0,255,136,0.08);
+        border: 1px solid rgba(0,255,136,0.35);
+        border-radius: 3px; color: #00ff88;
+        font-family: inherit; font-size: 9px;
+        letter-spacing: 0.1em; cursor: pointer;
+        transition: all 0.15s;
+    }
+    #spawn-btn:hover { background: rgba(0,255,136,0.18); }
+    #spawn-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* Time mode toggle */
+    .time-modes {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 4px;
+    }
+    .time-btn {
+        padding: 6px 2px;
+        background: transparent;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 3px; color: rgba(255,255,255,0.35);
+        font-family: inherit; font-size: 8px;
+        letter-spacing: 0.05em; cursor: pointer;
+        text-align: center; transition: all 0.15s;
+        line-height: 1.3;
+    }
+    .time-btn.active {
+        border-color: rgba(0,187,255,0.6);
+        color: #00bbff;
+        background: rgba(0,187,255,0.07);
+    }
+    .time-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    /* Agent cards */
+    #agent-cards { display: flex; flex-direction: column; gap: 6px; }
+    .agent-card {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.07);
+        border-radius: 4px; padding: 10px;
+        border-left: 3px solid #ff3a6e;
+        font-size: 10px;
+    }
+    .agent-card-header {
+        display: flex; justify-content: space-between;
+        align-items: center; margin-bottom: 6px;
+    }
+    .agent-name { font-size: 11px; font-weight: 600; color: #fff; }
+    .agent-mode {
+        font-size: 8px; letter-spacing: 0.1em;
+        padding: 2px 6px; border-radius: 2px;
+        background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.6);
+    }
+    .agent-mode.IDLE       { color: rgba(255,255,255,0.4); }
+    .agent-mode.IMAGING    { background: rgba(0,255,136,0.12); color: #00ff88; }
+    .agent-mode.DOWNLINK   { background: rgba(0,187,255,0.12); color: #00bbff; }
+    .agent-mode.YIELD_COVERAGE { background: rgba(255,165,0,0.12); color: orange; }
+    .agent-mode.SAFE_MODE  { background: rgba(255,100,100,0.12); color: #ff6464; }
+    .agent-bars { display: flex; flex-direction: column; gap: 3px; }
+    .bar-row { display: flex; align-items: center; gap: 6px; }
+    .bar-label { font-size: 8px; color: rgba(255,255,255,0.3); width: 50px; }
+    .bar-track {
+        flex: 1; height: 4px;
+        background: rgba(255,255,255,0.06);
+        border-radius: 2px; overflow: hidden;
+    }
+    .bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+    .bar-fill.battery { background: #00ff88; }
+    .bar-fill.storage  { background: #00bbff; }
+    .bar-fill.reward   { background: #ff3a6e; }
+    .bar-val { font-size: 8px; color: rgba(255,255,255,0.5); width: 30px; text-align: right; }
+
+    .step-counter {
+        font-size: 9px; color: rgba(255,255,255,0.3);
+        text-align: center; letter-spacing: 0.1em;
+    }
+    .step-counter span { color: rgba(255,255,255,0.7); }
+
+    /* Extended inspector for IOLA agents */
+    .inspector-reward { margin-top: 8px; }
+    .reward-row { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 3px; }
+    .reward-row .rl { color: rgba(255,255,255,0.3); }
+    .reward-row .rv { color: #fff; font-weight: 500; }
+
+    /* Ground station markers */
+    .gs-badge {
+        display: inline-block; font-size: 8px;
+        padding: 1px 5px; border-radius: 2px;
+        background: rgba(255,165,0,0.15);
+        border: 1px solid rgba(255,165,0,0.3);
+        color: orange; margin-right: 4px;
+    }
+    </style>
 </head>
 <body>
 
 <img id="watermark" src="./iola-logo-space.png" alt="IOLA">
+
+<!-- Left panel: catalog stats -->
 <div id="ui">
     <div class="wordmark">IOLA ORBIT</div>
     <div class="panel">
@@ -47,6 +179,7 @@
     </div>
 </div>
 
+<!-- Right panel: inspector (background satellite or IOLA agent) -->
 <div id="inspector" class="hidden">
     <div class="inspector-header">OBJECT</div>
     <div id="inspector-name"></div>
@@ -56,6 +189,65 @@
         <span class="label">CLASS</span><span id="inspector-class"></span>
         <span class="label">ALT</span><span id="inspector-alt"></span>
     </div>
+    <!-- Extended fields for IOLA agents -->
+    <div id="inspector-agent-section" style="display:none;">
+        <div class="divider"></div>
+        <div class="inspector-grid">
+            <span class="label">MODE</span><span id="inspector-mode"></span>
+            <span class="label">BATTERY</span><span id="inspector-battery"></span>
+            <span class="label">STORAGE</span><span id="inspector-storage"></span>
+            <span class="label">SUNLIT</span><span id="inspector-sunlit"></span>
+            <span class="label">WINDOW</span><span id="inspector-window"></span>
+        </div>
+        <div class="inspector-reward">
+            <div class="divider"></div>
+            <div class="inspector-header">REWARD BREAKDOWN</div>
+            <div class="reward-row"><span class="rl">SURVIVAL</span><span class="rv" id="rw-survival"></span></div>
+            <div class="reward-row"><span class="rl">MISSION</span><span class="rv" id="rw-mission"></span></div>
+            <div class="reward-row"><span class="rl">OPTIONALITY</span><span class="rv" id="rw-opt"></span></div>
+            <div class="reward-row"><span class="rl">EXTERNALITY</span><span class="rv" id="rw-ext"></span></div>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom-right: IkirereMesh command center -->
+<div id="mesh-panel">
+    <div class="section-title">IKIRERE MESH — COMMAND CENTER</div>
+
+    <!-- Spawn controls -->
+    <div class="spawn-row">
+        <label>AGENTS</label>
+        <input type="number" id="fleet-size" value="3" min="1" max="10">
+        <button id="spawn-btn">SPAWN FLEET</button>
+    </div>
+
+    <!-- Time mode -->
+    <div class="section-title" style="margin-top:4px;">OBSERVATION MODE</div>
+    <div class="time-modes">
+        <button class="time-btn" data-mode="realtime" disabled>
+            LIVE<br><span style="font-size:7px;opacity:0.6">real time</span>
+        </button>
+        <button class="time-btn active" data-mode="compressed" disabled>
+            PASS<br><span style="font-size:7px;opacity:0.6">90 min → 90 sec</span>
+        </button>
+        <button class="time-btn" data-mode="step" disabled>
+            STEP<br><span style="font-size:7px;opacity:0.6">manual</span>
+        </button>
+    </div>
+    <button id="step-btn" style="display:none; width:100%; padding:6px 0;
+        background:rgba(0,187,255,0.08); border:1px solid rgba(0,187,255,0.3);
+        border-radius:3px; color:#00bbff; font-family:inherit; font-size:9px;
+        letter-spacing:0.1em; cursor:pointer;">
+        NEXT STEP →
+    </button>
+
+    <!-- Step counter -->
+    <div class="step-counter" id="step-display" style="display:none;">
+        STEP <span id="step-num">0</span> / 90 &nbsp;·&nbsp; EP <span id="ep-id">—</span>
+    </div>
+
+    <!-- Agent cards -->
+    <div id="agent-cards"></div>
 </div>
 
 <script type="module">
@@ -63,13 +255,20 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
 
+// ─── Configuration ───────────────────────────────────────────────────────────
+const API_BASE = window.location.hostname === "localhost"
+    ? "http://localhost:8000"
+    : "https://iola-orbit-server.onrender.com";
+const WS_BASE  = API_BASE.replace("https://", "wss://").replace("http://", "ws://");
+
 const CLASS_COLORS = [0x00ff88, 0x00bbff, 0xff6600];
 const CLASS_NAMES  = ["LEO", "MEO", "GEO"];
 const COUNT_IDS    = ["leo-count", "meo-count", "geo-count"];
+const AGENT_COLOR  = 0xff3a6e;   // Hot pink — unmistakable against LEO green
 
-// Scene
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+// ─── Scene setup ─────────────────────────────────────────────────────────────
+const scene    = new THREE.Scene();
+const camera   = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.z = 20;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -85,8 +284,7 @@ const earth = new THREE.Mesh(
     new THREE.SphereGeometry(6.371, 64, 64),
     new THREE.MeshPhongMaterial({
         map: textureLoader.load("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"),
-        specular: new THREE.Color(0x222222),
-        shininess: 12
+        specular: new THREE.Color(0x222222), shininess: 12
     })
 );
 scene.add(earth);
@@ -97,28 +295,21 @@ const atmosphere = new THREE.Mesh(
 );
 scene.add(atmosphere);
 
-// Sun
 const light = new THREE.DirectionalLight(0xffffff, 2);
 light.position.set(150, 60, 90);
 scene.add(light);
 scene.add(new THREE.AmbientLight(0xffffff, 0.08));
-const sun = new THREE.Mesh(
-    new THREE.SphereGeometry(1.5, 16, 16),
-    new THREE.MeshBasicMaterial({ color: 0xFFFDE7 })
-);
+const sun = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshBasicMaterial({ color: 0xFFFDE7 }));
 sun.position.set(150, 60, 90);
 scene.add(sun);
 
-// Starfield
 const starPos = [];
-for (let i = 0; i < 1000; i++) {
-    starPos.push((Math.random()-0.5)*2000, (Math.random()-0.5)*2000, (Math.random()-0.5)*2000);
-}
+for (let i = 0; i < 1000; i++) starPos.push((Math.random()-0.5)*2000, (Math.random()-0.5)*2000, (Math.random()-0.5)*2000);
 const starsGeo = new THREE.BufferGeometry();
 starsGeo.setAttribute("position", new THREE.Float32BufferAttribute(starPos, 3));
 scene.add(new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.15 })));
 
-// Satellite geometry — one Points object per orbit class
+// Background satellite point clouds (per orbit class)
 const classGeos = CLASS_COLORS.map(() => new THREE.BufferGeometry());
 const classPts  = classGeos.map((geo, i) => {
     const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: CLASS_COLORS[i], size: 0.05 }));
@@ -126,69 +317,77 @@ const classPts  = classGeos.map((geo, i) => {
     return pts;
 });
 
-// Per-satellite metadata aligned to the flat position arrays
-let satMeta = [];   // [{ name, norad_id, classIdx }]
-let totalCount = 0;
+// IOLA agent spheres — rendered as distinct glowing spheres, not dots
+const agentMeshes = [];   // THREE.Mesh per agent
+const AGENT_SPHERE = new THREE.SphereGeometry(0.12, 12, 12);
+const AGENT_MAT    = new THREE.MeshBasicMaterial({ color: AGENT_COLOR });
 
-// Worker owns all SGP4 math
-const worker = new Worker("./propagate.worker.js");
+// Ground station markers (Accra + Kigali)
+function latLonToXYZ(lat, lon, r=6.5) {
+    const phi   = (90 - lat) * Math.PI / 180;
+    const theta = (lon + 180) * Math.PI / 180;
+    return new THREE.Vector3(
+        -r * Math.sin(phi) * Math.cos(theta),
+         r * Math.cos(phi),
+         r * Math.sin(phi) * Math.sin(theta)
+    );
+}
+function addGroundStation(lat, lon, label) {
+    const pos  = latLonToXYZ(lat, lon);
+    const dot  = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+    dot.position.copy(pos);
+    scene.add(dot);
+}
+addGroundStation(5.6037, -0.1870, "Accra");
+addGroundStation(-1.9415, 30.0574, "Kigali");
+
+// ─── Catalog loading ──────────────────────────────────────────────────────────
+let satMeta = [];
+let totalCount = 0;
 let paused = false;
 let workerReady = false;
 let pendingPropagate = false;
 
+const worker = new Worker("./propagate.worker.js");
+
 worker.onmessage = (e) => {
     if (e.data.type === "ready") {
         workerReady = true;
-        totalCount = e.data.count;
+        totalCount  = e.data.count;
         document.getElementById("satellite-count").innerText = totalCount;
         if (!paused) worker.postMessage({ type: "propagate" });
         return;
     }
-
     if (e.data.type === "positions") {
         const { positions, altitudes, classes } = e.data;
         pendingPropagate = false;
-
-        // Split flat arrays into per-class buckets
         const classBufs  = [[], [], []];
         const classMetas = [[], [], []];
         const classCounts = [0, 0, 0];
-
         for (let i = 0; i < totalCount; i++) {
             const cls = classes[i];
             classBufs[cls].push(positions[i*3], positions[i*3+1], positions[i*3+2]);
             classMetas[cls].push({ name: satMeta[i]?.name, norad_id: satMeta[i]?.norad_id, altitude: altitudes[i], classIdx: cls });
             classCounts[cls]++;
         }
-
         for (let c = 0; c < 3; c++) {
-            const arr = new Float32Array(classBufs[c]);
-            classGeos[c].setAttribute("position", new THREE.BufferAttribute(arr, 3));
+            classGeos[c].setAttribute("position", new THREE.BufferAttribute(new Float32Array(classBufs[c]), 3));
             classGeos[c].attributes.position.needsUpdate = true;
-            COUNT_IDS.forEach((id, idx) => {
-                if (idx === c) document.getElementById(id).innerText = classCounts[c];
-            });
+            COUNT_IDS.forEach((id, idx) => { if (idx === c) document.getElementById(id).innerText = classCounts[c]; });
         }
-
-        // Rebuild metadata lookup by class
         classPts.forEach((_, c) => { classPts[c].userData.metas = classMetas[c]; });
     }
 };
 
-// Fetch TLEs, send to worker
-const response = await fetch("/api/satellites");
+const response = await fetch(`${API_BASE}/tles`);
 const raw = await response.text();
-
-// Parse names/norad_ids on main thread for inspector lookups
 const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
 for (let i = 0; i < lines.length - 2; i += 3) {
     if (lines[i].startsWith("1 ") || lines[i].startsWith("2 ")) continue;
     satMeta.push({ name: lines[i], norad_id: lines[i+1].substring(2,7).trim() });
 }
-
 worker.postMessage({ type: "init", raw });
 
-// Propagate every 1 second on exact wall clock
 setInterval(() => {
     if (workerReady && !paused && !pendingPropagate) {
         pendingPropagate = true;
@@ -196,7 +395,192 @@ setInterval(() => {
     }
 }, 1000);
 
-// Filters
+// ─── IkirereMesh state ────────────────────────────────────────────────────────
+let meshActive  = false;
+let meshAgents  = [];      // latest agent state from API
+let meshWS      = null;
+let timeMode    = "compressed";
+let wsManualStep = null;   // resolve function for step-mode promise
+
+// Convert ECI km → Three.js scene units (Earth radius = 6.371 scene units)
+function eciToScene(x, y, z) {
+    const scale = 1 / 1000;  // 1000 km = 1 scene unit
+    return new THREE.Vector3(x * scale, y * scale, z * scale);
+}
+
+function updateAgentMeshes(agents) {
+    // Resize pool
+    while (agentMeshes.length < agents.length) {
+        const mesh = new THREE.Mesh(AGENT_SPHERE, AGENT_MAT.clone());
+        scene.add(mesh);
+        agentMeshes.push(mesh);
+    }
+    // Hide extras
+    for (let i = agents.length; i < agentMeshes.length; i++) agentMeshes[i].visible = false;
+
+    agents.forEach((agent, i) => {
+        const pos = eciToScene(agent.x, agent.y, agent.z);
+        agentMeshes[i].position.copy(pos);
+        agentMeshes[i].visible = true;
+        agentMeshes[i].userData = agent;
+
+        // Color by mode
+        const modeColors = {
+            IMAGING:        0x00ff88,
+            DOWNLINK:       0x00bbff,
+            YIELD_COVERAGE: 0xffaa00,
+            SAFE_MODE:      0xff4444,
+            IDLE:           0xff3a6e,
+            MANEUVER_PREP:  0xffff00,
+        };
+        agentMeshes[i].material.color.setHex(modeColors[agent.mode] || 0xff3a6e);
+    });
+}
+
+function makeBar(label, pct, cls) {
+    const row   = document.createElement("div"); row.className = "bar-row";
+    const lbl   = document.createElement("div"); lbl.className = "bar-label"; lbl.textContent = label;
+    const track = document.createElement("div"); track.className = "bar-track";
+    const fill  = document.createElement("div"); fill.className = `bar-fill ${cls}`; fill.style.width = `${pct}%`;
+    const val   = document.createElement("div"); val.className = "bar-val"; val.textContent = `${Math.round(pct)}%`;
+    track.appendChild(fill); row.append(lbl, track, val);
+    return row;
+}
+
+function renderAgentCards(agents) {
+    const container = document.getElementById("agent-cards");
+    // Clear safely — no user data involved
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    agents.forEach(agent => {
+        const battPct  = Math.max(0, Math.min(100, agent.battery_pct));
+        const storePct = Math.max(0, Math.min(100, agent.storage_pct));
+
+        const card = document.createElement("div");
+        card.className = "agent-card";
+
+        // Header: name + mode badge — all textContent, no innerHTML
+        const header = document.createElement("div"); header.className = "agent-card-header";
+        const nameEl = document.createElement("div"); nameEl.className = "agent-name";
+        const rawName = agent.name || "";
+        nameEl.textContent = rawName.length > 18 ? rawName.substring(0, 18) + "…" : rawName;
+
+        const modeEl = document.createElement("div");
+        const safeMode = (agent.mode || "IDLE").replace(/[^A-Z_]/g, "");  // whitelist A-Z and _
+        modeEl.className = `agent-mode ${safeMode}`;
+        modeEl.textContent = safeMode.replace("_", " ");
+
+        header.append(nameEl, modeEl);
+
+        // Bars
+        const bars = document.createElement("div"); bars.className = "agent-bars";
+        bars.append(makeBar("BATTERY", battPct, "battery"), makeBar("STORAGE", storePct, "storage"));
+
+        // Status line
+        const status = document.createElement("div");
+        status.style.cssText = "font-size:8px;color:rgba(255,255,255,0.3);margin-top:5px;";
+        status.textContent = `${Math.round(agent.altitude_km)} km · ${agent.sunlit ? "SUNLIT" : "ECLIPSE"}`;
+
+        if (agent.in_contact_window) {
+            const badge = document.createElement("span"); badge.className = "gs-badge";
+            badge.textContent = "IN WINDOW";
+            status.append(" ", badge);
+        }
+
+        card.append(header, bars, status);
+        container.appendChild(card);
+    });
+}
+
+function updateStepDisplay(step, episodeId) {
+    const d = document.getElementById("step-display");
+    d.style.display = "block";
+    document.getElementById("step-num").innerText = step;
+    document.getElementById("ep-id").innerText = episodeId ? episodeId.substring(0,12) : "—";
+}
+
+function applyMeshState(data) {
+    meshAgents = data.agents || [];
+    updateAgentMeshes(meshAgents);
+    renderAgentCards(meshAgents);
+    if (data.episode_step !== undefined) updateStepDisplay(data.episode_step, data.episode_id);
+}
+
+// ─── Spawn ────────────────────────────────────────────────────────────────────
+document.getElementById("spawn-btn").addEventListener("click", async () => {
+    const btn = document.getElementById("spawn-btn");
+    btn.disabled = true;
+    btn.innerText = "SPAWNING…";
+
+    const fleetSize = parseInt(document.getElementById("fleet-size").value) || 3;
+
+    // Close any existing WebSocket
+    if (meshWS) { meshWS.close(); meshWS = null; }
+
+    try {
+        const res = await fetch(`${API_BASE}/mesh/spawn?fleet_size=${fleetSize}&seed=42`, { method: "POST" });
+        const data = await res.json();
+        if (data.error) { alert(data.error); btn.disabled = false; btn.innerText = "SPAWN FLEET"; return; }
+
+        meshActive = true;
+        applyMeshState(data);
+
+        // Enable time mode buttons
+        document.querySelectorAll(".time-btn").forEach(b => b.disabled = false);
+        btn.innerText = "RESTART";
+        btn.disabled  = false;
+
+        // Start streaming
+        startStream();
+    } catch(e) {
+        btn.disabled  = false;
+        btn.innerText = "SPAWN FLEET";
+        console.error("Spawn failed:", e);
+        alert("Could not connect to IkirereMesh API. Is the server running?");
+    }
+});
+
+// ─── Time mode selection ──────────────────────────────────────────────────────
+document.querySelectorAll(".time-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        if (!meshActive) return;
+        document.querySelectorAll(".time-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        timeMode = btn.dataset.mode;
+        document.getElementById("step-btn").style.display = timeMode === "step" ? "block" : "none";
+        // Reconnect stream with new mode
+        if (meshWS) { meshWS.close(); meshWS = null; }
+        startStream();
+    });
+});
+
+// Manual step button
+document.getElementById("step-btn").addEventListener("click", () => {
+    if (meshWS && timeMode === "step") {
+        meshWS.send(JSON.stringify({ action: "step" }));
+    }
+});
+
+// ─── WebSocket stream ─────────────────────────────────────────────────────────
+function startStream() {
+    const ws = new WebSocket(`${WS_BASE}/mesh/stream?mode=${timeMode}`);
+    meshWS = ws;
+
+    ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.error) { console.error("Mesh stream error:", data.error); return; }
+        if (data.type === "episode_end") {
+            console.log("Episode complete at step", data.step);
+            return;
+        }
+        applyMeshState(data);
+    };
+
+    ws.onerror  = (e) => console.error("WS error", e);
+    ws.onclose  = ()  => { if (meshWS === ws) meshWS = null; };
+}
+
+// ─── Filters & UI ─────────────────────────────────────────────────────────────
 document.querySelectorAll(".filter-btn").forEach(btn => {
     btn.addEventListener("click", () => {
         btn.classList.toggle("active");
@@ -204,13 +588,12 @@ document.querySelectorAll(".filter-btn").forEach(btn => {
     });
 });
 
-// Pause
 document.getElementById("pause-btn").addEventListener("click", () => {
     paused = !paused;
     document.getElementById("pause-btn").innerText = paused ? "RESUME" : "PAUSE";
 });
 
-// Click to inspect
+// ─── Click inspector ──────────────────────────────────────────────────────────
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
@@ -218,8 +601,34 @@ renderer.domElement.addEventListener("click", (e) => {
     mouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
-    raycaster.params.Points.threshold = camera.position.length() * 0.008;
 
+    // Check IOLA agents first (spheres, exact hit)
+    const agentHits = raycaster.intersectObjects(agentMeshes.filter(m => m.visible));
+    if (agentHits.length > 0) {
+        const agent = agentHits[0].object.userData;
+        if (agent && agent.norad_id) {
+            document.getElementById("inspector-name").innerText  = agent.name;
+            document.getElementById("inspector-norad").innerText = agent.norad_id;
+            document.getElementById("inspector-class").innerText = "LEO (IOLA)";
+            document.getElementById("inspector-alt").innerText   = `${Math.round(agent.altitude_km)} km`;
+            document.getElementById("inspector-mode").innerText    = agent.mode;
+            document.getElementById("inspector-battery").innerText = `${Math.round(agent.battery_pct)}%`;
+            document.getElementById("inspector-storage").innerText = `${Math.round(agent.storage_pct)}%`;
+            document.getElementById("inspector-sunlit").innerText  = agent.sunlit ? "YES" : "NO";
+            document.getElementById("inspector-window").innerText  =
+                agent.in_contact_window ? `YES (${Math.round(agent.contact_window_remaining*90)} steps)` : "NO";
+            document.getElementById("rw-survival").innerText    = (agent.reward_breakdown?.survival  || 0).toFixed(3);
+            document.getElementById("rw-mission").innerText     = (agent.reward_breakdown?.mission   || 0).toFixed(3);
+            document.getElementById("rw-opt").innerText         = (agent.reward_breakdown?.optionality || 0).toFixed(3);
+            document.getElementById("rw-ext").innerText         = (agent.reward_breakdown?.externality || 0).toFixed(3);
+            document.getElementById("inspector-agent-section").style.display = "block";
+            document.getElementById("inspector").classList.remove("hidden");
+            return;
+        }
+    }
+
+    // Background satellites
+    raycaster.params.Points.threshold = camera.position.length() * 0.008;
     for (let c = 0; c < 3; c++) {
         if (!classPts[c].visible) continue;
         const hits = raycaster.intersectObject(classPts[c]);
@@ -230,6 +639,7 @@ renderer.domElement.addEventListener("click", (e) => {
             document.getElementById("inspector-norad").innerText = meta.norad_id;
             document.getElementById("inspector-class").innerText = CLASS_NAMES[meta.classIdx];
             document.getElementById("inspector-alt").innerText   = `${Math.round(meta.altitude)} km`;
+            document.getElementById("inspector-agent-section").style.display = "none";
             document.getElementById("inspector").classList.remove("hidden");
             return;
         }
@@ -237,12 +647,12 @@ renderer.domElement.addEventListener("click", (e) => {
     document.getElementById("inspector").classList.add("hidden");
 });
 
-// Animate — pure render, zero math
+// ─── Render loop ──────────────────────────────────────────────────────────────
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
     const earthAngle = (Date.now() / 86164100) * Math.PI * 2;
-    earth.rotation.y = earthAngle;
+    earth.rotation.y     = earthAngle;
     atmosphere.rotation.y = earthAngle;
     renderer.render(scene, camera);
 }
