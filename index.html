@@ -557,17 +557,31 @@ document.getElementById("spawn-btn").addEventListener("click", async () => {
         }
         if (!healthOk) { btn.disabled = false; btn.innerText = "SPAWN FLEET"; alert("Server is offline. Check Render dashboard."); return; }
 
-        // Step 2: spawn — this takes 3-8s (SGP4 precomputation for 15k sats)
-        btn.innerText = "SPAWNING… (up to 30s)";
-        const res = await fetch(
+        // Step 2: kick off spawn (returns immediately with state=running)
+        btn.innerText = "SPAWNING… (60-90s on free server)";
+        const spawnRes = await fetch(
             `${API_BASE}/mesh/spawn?fleet_size=${fleetSize}&seed=42`,
-            { method: "POST", signal: AbortSignal.timeout(60000) }
+            { method: "POST", signal: AbortSignal.timeout(15000) }
         );
-        const data = await res.json();
-        if (data.error) { btn.disabled = false; btn.innerText = "SPAWN FLEET"; alert(data.error); return; }
+        const spawnData = await spawnRes.json();
+        if (spawnData.state === "error") { btn.disabled = false; btn.innerText = "SPAWN FLEET"; alert(spawnData.error); return; }
+
+        // Step 3: poll /mesh/spawn/status until ready
+        let ready = false;
+        for (let poll = 0; poll < 60; poll++) {
+            await new Promise(r => setTimeout(r, 3000));
+            btn.innerText = `SPAWNING… ${(poll+1)*3}s`;
+            try {
+                const s = await fetch(`${API_BASE}/mesh/spawn/status`, { signal: AbortSignal.timeout(5000) });
+                const sd = await s.json();
+                if (sd.state === "ready") { ready = true; applyMeshState(sd); break; }
+                if (sd.state === "error") { alert(`Spawn error: ${sd.error}`); break; }
+            } catch(_) {}
+        }
+
+        if (!ready) { btn.disabled = false; btn.innerText = "SPAWN FLEET"; alert("Spawn timed out. Try again."); return; }
 
         meshActive = true;
-        applyMeshState(data);
         btn.innerText = "RESTART";
         btn.disabled  = false;
         startStream();
