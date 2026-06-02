@@ -23,10 +23,13 @@ self.onmessage = (e) => {
     }
 
     if (e.data.type === "propagate") {
-        const now = new Date();
+        // Accept a simulated timestamp (ms) so time modes work for all satellites.
+        // Falls back to Date.now() for realtime mode.
+        const now = e.data.timestamp ? new Date(e.data.timestamp) : new Date();
+
         const positions = new Float32Array(satrecs.length * 3);
         const altitudes = new Float32Array(satrecs.length);
-        const classes = new Uint8Array(satrecs.length);
+        const classes   = new Uint8Array(satrecs.length);
 
         for (let i = 0; i < satrecs.length; i++) {
             const pv = satellite.propagate(satrecs[i].satrec, now);

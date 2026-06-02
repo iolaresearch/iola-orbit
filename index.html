@@ -224,13 +224,13 @@
     <!-- Time mode -->
     <div class="section-title" style="margin-top:4px;">OBSERVATION MODE</div>
     <div class="time-modes">
-        <button class="time-btn" data-mode="realtime" disabled>
+        <button class="time-btn" data-mode="realtime">
             LIVE<br><span style="font-size:7px;opacity:0.6">real time</span>
         </button>
-        <button class="time-btn active" data-mode="compressed" disabled>
+        <button class="time-btn active" data-mode="compressed">
             PASS<br><span style="font-size:7px;opacity:0.6">90 min → 90 sec</span>
         </button>
-        <button class="time-btn" data-mode="step" disabled>
+        <button class="time-btn" data-mode="step">
             STEP<br><span style="font-size:7px;opacity:0.6">manual</span>
         </button>
     </div>
@@ -317,29 +317,31 @@ const classPts  = classGeos.map((geo, i) => {
     return pts;
 });
 
-// IOLA agent spheres — rendered as distinct glowing spheres, not dots
-const agentMeshes = [];   // THREE.Mesh per agent
-const AGENT_SPHERE = new THREE.SphereGeometry(0.12, 12, 12);
-const AGENT_MAT    = new THREE.MeshBasicMaterial({ color: AGENT_COLOR });
+// IOLA agent spheres — large, bright white core, visible at any zoom
+const agentMeshes = [];
+const AGENT_SPHERE = new THREE.SphereGeometry(0.18, 16, 16);
 
-// Ground station markers (Accra + Kigali)
-function latLonToXYZ(lat, lon, r=6.5) {
-    const phi   = (90 - lat) * Math.PI / 180;
-    const theta = (lon + 180) * Math.PI / 180;
-    return new THREE.Vector3(
-        -r * Math.sin(phi) * Math.cos(theta),
-         r * Math.cos(phi),
-         r * Math.sin(phi) * Math.sin(theta)
+// Ground station markers — parented to Earth so they rotate with it
+// Three.js Earth: lon=0 is at (0,0,-R) with no rotation; positive lon goes west in default orientation.
+// We use the same spherical convention as the satellite worker: x=R·cos(lat)·cos(lon), etc.
+function addGroundStation(lat, lon) {
+    const phi = lat  * Math.PI / 180;   // geographic latitude → elevation angle
+    const lam = lon  * Math.PI / 180;   // geographic longitude
+    const R   = 6.371;
+    // ECI-aligned: x = R·cos(lat)·cos(lon), y = R·sin(lat), z = -R·cos(lat)·sin(lon)
+    // The minus on z matches Three.js default Earth texture orientation
+    const x =  R * Math.cos(phi) * Math.cos(lam);
+    const y =  R * Math.sin(phi);
+    const z = -R * Math.cos(phi) * Math.sin(lam);
+    const dot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.07, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0xffaa00 })
     );
+    dot.position.set(x, y, z);
+    earth.add(dot);   // child of Earth — rotates with it
 }
-function addGroundStation(lat, lon, label) {
-    const pos  = latLonToXYZ(lat, lon);
-    const dot  = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
-    dot.position.copy(pos);
-    scene.add(dot);
-}
-addGroundStation(5.6037, -0.1870, "Accra");
-addGroundStation(-1.9415, 30.0574, "Kigali");
+addGroundStation(5.6037,  -0.1870);   // Accra, Ghana
+addGroundStation(-1.9415,  30.0574);  // Kigali, Rwanda
 
 // ─── Catalog loading ──────────────────────────────────────────────────────────
 let satMeta = [];
@@ -388,12 +390,30 @@ for (let i = 0; i < lines.length - 2; i += 3) {
 }
 worker.postMessage({ type: "init", raw });
 
-setInterval(() => {
-    if (workerReady && !paused && !pendingPropagate) {
+// ─── Simulation clock ─────────────────────────────────────────────────────────
+// Each time mode advances simulated time at a different rate:
+//   realtime:   1 real second   = 1 simulated second   (1× speed)
+//   compressed: 1 real second   = 60 simulated seconds (60× speed — 90min pass in 90s)
+//   step:       manual advance  = 60 simulated seconds per click
+const TIME_MULTIPLIERS = { realtime: 1, compressed: 60, step: 0 };
+let simTimeMs = Date.now();   // simulated UTC in ms
+let lastRealMs = Date.now();
+
+// Propagate interval — fires every 250ms real time; advances simulated clock by multiplier
+const propagateLoop = setInterval(() => {
+    if (!workerReady || paused) return;
+    const nowReal = Date.now();
+    const elapsed = nowReal - lastRealMs;
+    lastRealMs = nowReal;
+
+    const mult = TIME_MULTIPLIERS[timeMode] ?? 1;
+    simTimeMs += elapsed * mult;
+
+    if (!pendingPropagate) {
         pendingPropagate = true;
-        worker.postMessage({ type: "propagate" });
+        worker.postMessage({ type: "propagate", timestamp: simTimeMs });
     }
-}, 1000);
+}, 250);
 
 // ─── IkirereMesh state ────────────────────────────────────────────────────────
 let meshActive  = false;
@@ -408,14 +428,25 @@ function eciToScene(x, y, z) {
     return new THREE.Vector3(x * scale, y * scale, z * scale);
 }
 
+const MODE_COLORS = {
+    IMAGING:        0x00ff88,
+    DOWNLINK:       0x00bbff,
+    YIELD_COVERAGE: 0xffaa00,
+    SAFE_MODE:      0xff4444,
+    IDLE:           0xff3a6e,
+    MANEUVER_PREP:  0xffff00,
+    REQUEST_RELAY:  0xcc88ff,
+    HOLD_POSITION:  0xffffff,
+};
+
 function updateAgentMeshes(agents) {
-    // Resize pool
+    // Grow pool
     while (agentMeshes.length < agents.length) {
-        const mesh = new THREE.Mesh(AGENT_SPHERE, AGENT_MAT.clone());
+        const mat  = new THREE.MeshPhongMaterial({ emissive: 0xff3a6e, emissiveIntensity: 1.5, color: 0xffffff });
+        const mesh = new THREE.Mesh(AGENT_SPHERE, mat);
         scene.add(mesh);
         agentMeshes.push(mesh);
     }
-    // Hide extras
     for (let i = agents.length; i < agentMeshes.length; i++) agentMeshes[i].visible = false;
 
     agents.forEach((agent, i) => {
@@ -423,17 +454,9 @@ function updateAgentMeshes(agents) {
         agentMeshes[i].position.copy(pos);
         agentMeshes[i].visible = true;
         agentMeshes[i].userData = agent;
-
-        // Color by mode
-        const modeColors = {
-            IMAGING:        0x00ff88,
-            DOWNLINK:       0x00bbff,
-            YIELD_COVERAGE: 0xffaa00,
-            SAFE_MODE:      0xff4444,
-            IDLE:           0xff3a6e,
-            MANEUVER_PREP:  0xffff00,
-        };
-        agentMeshes[i].material.color.setHex(modeColors[agent.mode] || 0xff3a6e);
+        const hex = MODE_COLORS[agent.mode] || 0xff3a6e;
+        agentMeshes[i].material.emissive.setHex(hex);
+        agentMeshes[i].material.color.setHex(hex);
     });
 }
 
@@ -525,8 +548,7 @@ document.getElementById("spawn-btn").addEventListener("click", async () => {
         meshActive = true;
         applyMeshState(data);
 
-        // Enable time mode buttons
-        document.querySelectorAll(".time-btn").forEach(b => b.disabled = false);
+        // Time mode buttons were already enabled at page load
         btn.innerText = "RESTART";
         btn.disabled  = false;
 
@@ -540,22 +562,32 @@ document.getElementById("spawn-btn").addEventListener("click", async () => {
     }
 });
 
-// ─── Time mode selection ──────────────────────────────────────────────────────
+// ─── Time mode selection — controls ALL satellite simulation speed ────────────
 document.querySelectorAll(".time-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-        if (!meshActive) return;
         document.querySelectorAll(".time-btn").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
         timeMode = btn.dataset.mode;
-        document.getElementById("step-btn").style.display = timeMode === "step" ? "block" : "none";
-        // Reconnect stream with new mode
-        if (meshWS) { meshWS.close(); meshWS = null; }
-        startStream();
+        lastRealMs = Date.now();   // reset clock reference on mode change
+
+        const stepBtn = document.getElementById("step-btn");
+        stepBtn.style.display = timeMode === "step" ? "block" : "none";
+
+        // Reconnect agent stream if active
+        if (meshActive) {
+            if (meshWS) { meshWS.close(); meshWS = null; }
+            startStream();
+        }
     });
 });
 
-// Manual step button
+// Manual step — advances simulation clock by one 60-second step for all satellites + agents
 document.getElementById("step-btn").addEventListener("click", () => {
+    simTimeMs += 60 * 1000;   // advance one decision step for all satellites
+    if (!pendingPropagate && workerReady) {
+        pendingPropagate = true;
+        worker.postMessage({ type: "propagate", timestamp: simTimeMs });
+    }
     if (meshWS && timeMode === "step") {
         meshWS.send(JSON.stringify({ action: "step" }));
     }
