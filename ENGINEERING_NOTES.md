@@ -1,0 +1,163 @@
+# IOLA Orbit Client — Engineering Notes
+## Visual Command Center / Frontend Visualiser
+
+**Status:** Phase 3 command center deployed, spawn pending fix  
+**Period:** 2026-05-15 onward  
+**Engineers:** Jason Quist (Founder & CEO) · Claude (Chief Research Scientist / Systems Architect)  
+**Repository:** iolaresearch/iola-orbit (PUBLIC)  
+**Deployed at:** orbit.ikirere.com (Vercel)
+
+---
+
+## Architecture
+
+**Single-file static app.** `index.html` contains all JavaScript. No build step, no npm, no framework. Deploys instantly to Vercel as a static site.
+
+```
+client/
+  index.html          — Three.js scene + IkirereMesh command center
+  propagate.worker.js — Web Worker running satellite.js SGP4 for all 15k satellites
+  styles.css          — UI styles
+  api/satellites.js   — Vercel serverless proxy → iola-orbit-server.onrender.com/tles
+  vercel.json         — outputDirectory: "."  (repo root IS the client root)
+```
+
+**Data flow:**
+```
+CelesTrak TLEs → /api/satellites (Vercel proxy) → propagate.worker.js (satellite.js SGP4)
+                                                  → Three.js Points per orbit class
+
+iola-orbit-server.onrender.com → /mesh/spawn → background thread
+                               → /mesh/spawn/status (poll) → agent state
+                               → /mesh/stream (WebSocket) → real-time steps
+```
+
+---
+
+## Environment Variables
+
+`IOLA_ORB_API_URL` must be set in Vercel project settings:
+```
+IOLA_ORB_API_URL=https://iola-orbit-server.onrender.com
+```
+
+The serverless function `api/satellites.js` reads this to proxy TLE requests.
+
+The Three.js frontend detects API base URL at runtime:
+```js
+const API_BASE = window.location.hostname === "localhost"
+    ? "http://localhost:8000"
+    : "https://iola-orbit-server.onrender.com";
+```
+
+---
+
+## Three.js Scene
+
+**Earth radius:** 6.371 scene units (= 6,371 km at 1:1000 scale)  
+**Satellite position scale:** ECI km ÷ 1000 = scene units  
+**LEO satellite at 550km altitude:** ~6.921 scene units from origin
+
+**Earth rotation:**
+```js
+const earthAngle = (Date.now() / 86164100) * Math.PI * 2;  // sidereal day
+earth.rotation.y = earthAngle;
+```
+
+**Ground station coordinate system:**
+```
+x =  R·cos(lat)·cos(lon)
+y =  R·sin(lat)
+z = -R·cos(lat)·sin(lon)
+```
+Ground stations are `earth.add(dot)` — children of Earth mesh, rotate with it.
+Accra: 5.6037°N, -0.1870°W  
+Kigali: -1.9415°S, 30.0574°E
+
+---
+
+## Satellite Worker
+
+`propagate.worker.js` accepts:
+```js
+{ type: "init", raw: "<TLE text>" }  // parse TLEs
+{ type: "propagate", timestamp: ms } // propagate to ms (optional, defaults to Date.now())
+```
+
+The `timestamp` parameter enables time mode simulation. LIVE mode passes `Date.now()`. PASS mode passes an advancing simulated clock at 60× speed.
+
+---
+
+## IkirereMesh Command Center
+
+### Spawn Flow
+
+1. Click SPAWN FLEET
+2. Frontend pings `/health` (warmup, handles cold starts)
+3. `POST /mesh/spawn?fleet_size=N&seed=42` — returns `{state: "running"}` immediately
+4. Frontend polls `GET /mesh/spawn/status` every 3s
+5. When `state === "ready"`, renders agents and opens WebSocket stream
+
+**Known issue:** `env.reset()` takes 90-180s on Render free tier — spawn never completes. Fix required (see Section 41.2 of phase3_engineering_notes.md).
+
+### Time Modes
+
+| Mode | simTimeMs update | Worker timestamp | Speed |
+|---|---|---|---|
+| LIVE | `= Date.now()` on every tick | current real time | 1× |
+| PASS | `+= elapsed × 60` | simulated future time | 60× (90min in 90s) |
+| STEP | `+= 60000` per click | +60s per click | manual |
+
+### Agent Rendering
+
+IOLA agents: `THREE.Mesh` with `SphereGeometry(0.18)` and `MeshPhongMaterial({ emissive: color })`.  
+Color-coded by operational mode:
+```js
+IMAGING: 0x00ff88    DOWNLINK: 0x00bbff    YIELD_COVERAGE: 0xffaa00
+SAFE_MODE: 0xff4444  IDLE: 0xff3a6e        REQUEST_RELAY: 0xcc88ff
+HOLD_POSITION: 0xffffff
+```
+
+---
+
+## Known Issues and TODO
+
+### Critical
+- **Spawn timeout on Render free tier:** `env.reset()` requires SGP4 precompute for 15,428 sats × 90 steps. Takes 90-180s on 0.1 shared CPU. Fix: pre-warm environment at server startup, cache it, serve cached state on spawn request. See `server/docs/phase3_engineering_notes.md` Section 41.2.
+
+### Medium
+- **WebSocket not tested end-to-end:** `/mesh/stream` implemented but never reached in production due to spawn timeout. Needs testing once spawn works.
+- **Agent click detection:** raycaster threshold may need tuning for small sphere size (0.18 scene units). Test at various zoom levels.
+- **Conjunction alerts:** Not yet overlaid on scene. Phase 2 `/conjunction/high-risk` exists on server, needs periodic polling and red alert marker rendering.
+
+### Minor  
+- **Orbit path arcs:** No trajectory line for IOLA agents (just current position). Would improve situational awareness.
+- **Contact window cones:** Accra/Kigali visibility cones not visualised. Could draw transparent cylinders when `in_contact_window=true`.
+- **Multi-user:** One global spawn state on server. Concurrent users overwrite each other. Fix: session-scoped environments.
+
+---
+
+## Deployment
+
+**Vercel** auto-deploys on push to `main` branch of `iolaresearch/iola-orbit`.
+
+Vercel settings:
+- Root Directory: ` ` (empty — repo root is client root)
+- Framework: Other
+- Output Directory: `.`
+- No build command needed (static files)
+
+`vercel.json` in repo root ensures `outputDirectory: "."` is always set.
+
+---
+
+## Security
+
+All external data rendered via `textContent` or DOM construction — no `innerHTML` with API data. Protects against XSS from malicious satellite names in the orbital catalog.
+
+CORS: the Vercel proxy (`api/satellites.js`) handles the TLE fetch. The Three.js frontend fetches from the same Vercel origin via `/api/satellites`.
+
+---
+
+*Signed: Jason Quist (Founder & CEO) · Claude (Chief Research Scientist / Systems Architect)*  
+*Last updated: 2026-06-02*
