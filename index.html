@@ -541,29 +541,41 @@ document.getElementById("spawn-btn").addEventListener("click", async () => {
     btn.innerText = "SPAWNING…";
 
     const fleetSize = parseInt(document.getElementById("fleet-size").value) || 3;
-
-    // Close any existing WebSocket
     if (meshWS) { meshWS.close(); meshWS = null; }
 
     try {
-        const res = await fetch(`${API_BASE}/mesh/spawn?fleet_size=${fleetSize}&seed=42`, { method: "POST" });
+        // Step 1: wake the server (Render free tier cold-starts in 30-60s)
+        btn.innerText = "WAKING SERVER…";
+        let healthOk = false;
+        for (let attempt = 0; attempt < 12; attempt++) {
+            try {
+                const h = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(8000) });
+                if (h.ok) { healthOk = true; break; }
+            } catch(_) {}
+            btn.innerText = `WAKING SERVER… (${(attempt+1)*8}s)`;
+            await new Promise(r => setTimeout(r, 1000));
+        }
+        if (!healthOk) { btn.disabled = false; btn.innerText = "SPAWN FLEET"; alert("Server is offline. Check Render dashboard."); return; }
+
+        // Step 2: spawn — this takes 3-8s (SGP4 precomputation for 15k sats)
+        btn.innerText = "SPAWNING… (up to 30s)";
+        const res = await fetch(
+            `${API_BASE}/mesh/spawn?fleet_size=${fleetSize}&seed=42`,
+            { method: "POST", signal: AbortSignal.timeout(60000) }
+        );
         const data = await res.json();
-        if (data.error) { alert(data.error); btn.disabled = false; btn.innerText = "SPAWN FLEET"; return; }
+        if (data.error) { btn.disabled = false; btn.innerText = "SPAWN FLEET"; alert(data.error); return; }
 
         meshActive = true;
         applyMeshState(data);
-
-        // Time mode buttons were already enabled at page load
         btn.innerText = "RESTART";
         btn.disabled  = false;
-
-        // Start streaming
         startStream();
     } catch(e) {
         btn.disabled  = false;
         btn.innerText = "SPAWN FLEET";
         console.error("Spawn failed:", e);
-        alert("Could not connect to IkirereMesh API. Is the server running?");
+        alert(`Spawn failed: ${e.message}. Check browser console for details.`);
     }
 });
 
