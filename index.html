@@ -224,10 +224,10 @@
     <!-- Time mode -->
     <div class="section-title" style="margin-top:4px;">OBSERVATION MODE</div>
     <div class="time-modes">
-        <button class="time-btn" data-mode="realtime">
+        <button class="time-btn active" data-mode="realtime">
             LIVE<br><span style="font-size:7px;opacity:0.6">real time</span>
         </button>
-        <button class="time-btn active" data-mode="compressed">
+        <button class="time-btn" data-mode="compressed">
             PASS<br><span style="font-size:7px;opacity:0.6">90 min → 90 sec</span>
         </button>
         <button class="time-btn" data-mode="step">
@@ -396,7 +396,7 @@ worker.postMessage({ type: "init", raw });
 //   compressed: 1 real second   = 60 simulated seconds (60× speed — 90min pass in 90s)
 //   step:       manual advance  = 60 simulated seconds per click
 const TIME_MULTIPLIERS = { realtime: 1, compressed: 60, step: 0 };
-let simTimeMs = Date.now();   // simulated UTC in ms
+let simTimeMs  = Date.now();   // simulated UTC in ms — starts at real now
 let lastRealMs = Date.now();
 
 // Propagate interval — fires every 250ms real time; advances simulated clock by multiplier
@@ -407,7 +407,12 @@ const propagateLoop = setInterval(() => {
     lastRealMs = nowReal;
 
     const mult = TIME_MULTIPLIERS[timeMode] ?? 1;
-    simTimeMs += elapsed * mult;
+    if (timeMode === "realtime") {
+        // Always use actual current time — zero drift, positions are always real
+        simTimeMs = Date.now();
+    } else {
+        simTimeMs += elapsed * mult;
+    }
 
     if (!pendingPropagate) {
         pendingPropagate = true;
@@ -419,7 +424,7 @@ const propagateLoop = setInterval(() => {
 let meshActive  = false;
 let meshAgents  = [];      // latest agent state from API
 let meshWS      = null;
-let timeMode    = "compressed";
+let timeMode    = "realtime";   // Default: LIVE real time
 let wsManualStep = null;   // resolve function for step-mode promise
 
 // Convert ECI km → Three.js scene units (Earth radius = 6.371 scene units)
@@ -568,7 +573,9 @@ document.querySelectorAll(".time-btn").forEach(btn => {
         document.querySelectorAll(".time-btn").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
         timeMode = btn.dataset.mode;
-        lastRealMs = Date.now();   // reset clock reference on mode change
+        lastRealMs = Date.now();
+        // LIVE: snap simulation clock back to actual real time immediately
+        if (timeMode === "realtime") simTimeMs = Date.now();
 
         const stepBtn = document.getElementById("step-btn");
         stepBtn.style.display = timeMode === "step" ? "block" : "none";
