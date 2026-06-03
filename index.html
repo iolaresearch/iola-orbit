@@ -282,14 +282,9 @@ document.body.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.autoRotateSpeed = 0.5;
 
-// Earth
-// COORDINATE SYSTEM NOTE:
-// Satellite positions come from SGP4/ECI where +z = North Pole.
-// Three.js SphereGeometry default has +y = North Pole.
-// To make the globe match the satellite coordinate frame, we tilt the Earth
-// mesh permanently by -90 degrees around x. This puts the North Pole at +z.
-// We then spin around z for GMST (Earth's actual rotation axis) instead of y.
-// Ground stations use the ECI convention: x=R*cos(lat)*cos(lon), z=R*sin(lat).
+// Earth — Three.js SphereGeometry default has North at +y, which is the
+// standard browser/WebGL "up" convention. We keep this and spin around y
+// for GMST. Ground stations and the light use the same y-up convention.
 const textureLoader = new THREE.TextureLoader();
 const earth = new THREE.Mesh(
     new THREE.SphereGeometry(6.371, 64, 64),
@@ -298,14 +293,12 @@ const earth = new THREE.Mesh(
         specular: new THREE.Color(0x222222), shininess: 12
     })
 );
-earth.rotation.x = -Math.PI / 2;   // tilt so North Pole aligns with scene +z (ECI convention)
 scene.add(earth);
 
 const atmosphere = new THREE.Mesh(
     new THREE.SphereGeometry(6.5, 64, 64),
     new THREE.MeshBasicMaterial({ color: 0x3399ff, transparent: true, opacity: 0.08, side: THREE.BackSide })
 );
-atmosphere.rotation.x = -Math.PI / 2;
 scene.add(atmosphere);
 
 const light = new THREE.DirectionalLight(0xffffff, 2);
@@ -359,20 +352,16 @@ function makeLabel(text) {
     return sprite;
 }
 
-// Ground station markers — parented to Earth so they rotate with it
-// Ground station coordinates in ECI convention.
-// Because the Earth mesh is tilted so North = +z, we use:
-//   x = R * cos(lat) * cos(lon)    (along equatorial plane toward prime meridian)
-//   y = R * cos(lat) * sin(lon)    (along equatorial plane 90 degrees east)
-//   z = R * sin(lat)               (toward North Pole — scene +z)
-// This matches the ECI coordinate convention used by SGP4 for satellite positions.
+// Ground station markers — parented to Earth so they rotate with it.
+// Three.js y-up convention: x = R·cos(lat)·cos(lon), y = R·sin(lat),
+// z = -R·cos(lat)·sin(lon). This places points correctly on the y-up globe.
 function addGroundStation(lat, lon) {
     const phi = lat  * Math.PI / 180;
     const lam = lon  * Math.PI / 180;
     const R   = 6.371;
     const x =  R * Math.cos(phi) * Math.cos(lam);
-    const y =  R * Math.cos(phi) * Math.sin(lam);
-    const z =  R * Math.sin(phi);
+    const y =  R * Math.sin(phi);
+    const z = -R * Math.cos(phi) * Math.sin(lam);
     const dot = new THREE.Mesh(
         new THREE.SphereGeometry(0.07, 12, 12),
         new THREE.MeshBasicMaterial({ color: 0xffaa00 })
@@ -1010,16 +999,13 @@ function animate() {
         currentSimMs = Date.now();
     }
 
-    // Earth rotation: GMST gives the angle from ECI x-axis to Greenwich meridian.
-    // Three.js rotates counterclockwise (from +y), which maps to eastward rotation.
-    // Negate so texture moves eastward (west-to-east, matching real Earth spin).
-    // Earth spins around its North Pole axis = scene +z (ECI convention, after the -90x tilt).
-    // rotation.z positive = counterclockwise from above = west-to-east = Earth's real spin.
-    // GMST gives the angle the Greenwich meridian has rotated from ECI +x.
-    // Setting rotation.z = GMST places geography correctly under satellite ECI positions.
+    // Earth rotation: spin around +y (Three.js y-up convention, North at +y).
+    // Positive rotation.y = counterclockwise from above North Pole = west-to-east.
+    // GMST gives the angle from ECI x-axis to the Greenwich meridian, increasing
+    // eastward — so rotation.y = +GMST places geography correctly.
     const gmst = gmstFromMs(currentSimMs);
-    earth.rotation.z      = gmst;
-    atmosphere.rotation.z = gmst;
+    earth.rotation.y      = gmst;
+    atmosphere.rotation.y = gmst;
 
     // Sun position in ECI from Vallado low-precision almanac (same formula as server).
     // JD → Julian centuries → mean longitude → mean anomaly → ecliptic longitude
