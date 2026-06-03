@@ -1002,8 +1002,11 @@ function animate() {
     // Earth rotation: GMST gives the angle from ECI x-axis to Greenwich meridian.
     // Three.js rotates counterclockwise (from +y), which maps to eastward rotation.
     // Negate so texture moves eastward (west-to-east, matching real Earth spin).
-    earth.rotation.y      = -gmstFromMs(currentSimMs);
-    atmosphere.rotation.y = -gmstFromMs(currentSimMs);
+    // Positive rotation.y in Three.js = counterclockwise from above = west-to-east.
+    // Earth spins west-to-east. GMST increases as it does so.
+    // Therefore earth.rotation.y = +GMST places geography correctly under ECI agents.
+    earth.rotation.y      = gmstFromMs(currentSimMs);
+    atmosphere.rotation.y = gmstFromMs(currentSimMs);
 
     // Sun position in ECI from Vallado low-precision almanac (same formula as server).
     // JD → Julian centuries → mean longitude → mean anomaly → ecliptic longitude
