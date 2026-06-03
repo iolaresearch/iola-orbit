@@ -161,3 +161,23 @@ CORS: the Vercel proxy (`api/satellites.js`) handles the TLE fetch. The Three.js
 
 *Signed: Jason Quist (Founder & CEO) · Claude (Chief Research Scientist / Systems Architect)*  
 *Last updated: 2026-06-02*
+
+---
+
+## Section 2 — Spawn Pre-Warm Fix (2026-06-02)
+
+**Root cause of 500 errors:** Three bugs found and fixed in sequence:
+1. `_spawn_status` dict used before module-level initialization — `NameError`
+2. `logging` module not imported — `log` variable undefined, 500 on spawn
+3. Render free tier 0.1 CPU: `env.reset()` (15,428 × 90 SGP4 steps) takes 5 minutes
+
+**Solution: pre-warm at startup.** `main.py` runs `_prewarm_mesh()` in a background thread immediately after server starts. Caches `env`, `policy`, `obs` via `set_prewarm()`. Spawn returns `state=ready` in **0.46s** from cache.
+
+**Behavior:**
+- Cold start (Render wakes): pre-warm runs ~5 min in background. Server serves other requests meanwhile. `/health` reports `prewarm_ready=false`.
+- After pre-warm: `/mesh/spawn` returns `state=ready` instantly. Self-ping every 60s keeps warm.
+- On AWS (real CPU): pre-warm completes in ~2 seconds.
+
+**Verified 2026-06-02:** Three LEO agents spawned — TPA-1 (514km), ONEWEB-0227 (1218km), BISONSAT (502km). Spawn in 0.46s.
+
+**Frontend polling:** Button shows "WAKING SERVER…" → pings `/health` → "SPAWNING…" → polls `/mesh/spawn/status` every 3s → shows agents when `state=ready`.
