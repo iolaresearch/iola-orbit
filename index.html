@@ -241,16 +241,9 @@
         <button class="time-btn" data-mode="compressed">
             PASS<br><span style="font-size:7px;opacity:0.6">90 min → 90 sec</span>
         </button>
-        <button class="time-btn" data-mode="step">
-            STEP<br><span style="font-size:7px;opacity:0.6">manual</span>
-        </button>
     </div>
-    <button id="step-btn" style="display:none; width:100%; padding:6px 0;
-        background:rgba(0,187,255,0.08); border:1px solid rgba(0,187,255,0.3);
-        border-radius:3px; color:#00bbff; font-family:inherit; font-size:9px;
-        letter-spacing:0.1em; cursor:pointer;">
-        NEXT STEP →
-    </button>
+    <!-- STEP mode button hidden — manual stepping reserved for training visualiser -->
+    <button id="step-btn" style="display:none;"></button>
 
     <!-- Step counter -->
     <div class="step-counter" id="step-display" style="display:none;">
@@ -290,6 +283,13 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.autoRotateSpeed = 0.5;
 
 // Earth
+// COORDINATE SYSTEM NOTE:
+// Satellite positions come from SGP4/ECI where +z = North Pole.
+// Three.js SphereGeometry default has +y = North Pole.
+// To make the globe match the satellite coordinate frame, we tilt the Earth
+// mesh permanently by -90 degrees around x. This puts the North Pole at +z.
+// We then spin around z for GMST (Earth's actual rotation axis) instead of y.
+// Ground stations use the ECI convention: x=R*cos(lat)*cos(lon), z=R*sin(lat).
 const textureLoader = new THREE.TextureLoader();
 const earth = new THREE.Mesh(
     new THREE.SphereGeometry(6.371, 64, 64),
@@ -298,12 +298,14 @@ const earth = new THREE.Mesh(
         specular: new THREE.Color(0x222222), shininess: 12
     })
 );
+earth.rotation.x = -Math.PI / 2;   // tilt so North Pole aligns with scene +z (ECI convention)
 scene.add(earth);
 
 const atmosphere = new THREE.Mesh(
     new THREE.SphereGeometry(6.5, 64, 64),
     new THREE.MeshBasicMaterial({ color: 0x3399ff, transparent: true, opacity: 0.08, side: THREE.BackSide })
 );
+atmosphere.rotation.x = -Math.PI / 2;
 scene.add(atmosphere);
 
 const light = new THREE.DirectionalLight(0xffffff, 2);
@@ -358,17 +360,19 @@ function makeLabel(text) {
 }
 
 // Ground station markers — parented to Earth so they rotate with it
-// Three.js Earth: lon=0 is at (0,0,-R) with no rotation; positive lon goes west in default orientation.
-// We use the same spherical convention as the satellite worker: x=R·cos(lat)·cos(lon), etc.
+// Ground station coordinates in ECI convention.
+// Because the Earth mesh is tilted so North = +z, we use:
+//   x = R * cos(lat) * cos(lon)    (along equatorial plane toward prime meridian)
+//   y = R * cos(lat) * sin(lon)    (along equatorial plane 90 degrees east)
+//   z = R * sin(lat)               (toward North Pole — scene +z)
+// This matches the ECI coordinate convention used by SGP4 for satellite positions.
 function addGroundStation(lat, lon) {
-    const phi = lat  * Math.PI / 180;   // geographic latitude → elevation angle
-    const lam = lon  * Math.PI / 180;   // geographic longitude
+    const phi = lat  * Math.PI / 180;
+    const lam = lon  * Math.PI / 180;
     const R   = 6.371;
-    // ECI-aligned: x = R·cos(lat)·cos(lon), y = R·sin(lat), z = -R·cos(lat)·sin(lon)
-    // The minus on z matches Three.js default Earth texture orientation
     const x =  R * Math.cos(phi) * Math.cos(lam);
-    const y =  R * Math.sin(phi);
-    const z = -R * Math.cos(phi) * Math.sin(lam);
+    const y =  R * Math.cos(phi) * Math.sin(lam);
+    const z =  R * Math.sin(phi);
     const dot = new THREE.Mesh(
         new THREE.SphereGeometry(0.07, 12, 12),
         new THREE.MeshBasicMaterial({ color: 0xffaa00 })
@@ -743,8 +747,12 @@ document.querySelectorAll(".time-btn").forEach(btn => {
         btn.classList.add("active");
         timeMode = btn.dataset.mode;
         lastRealMs = Date.now();
-        // LIVE: snap simulation clock back to actual real time immediately
         if (timeMode === "realtime") simTimeMs = Date.now();
+        // Reset the dead-reckoning anchor so the first step in the new mode
+        // does not extrapolate from a stale reference, which would throw agents
+        // to wrong positions (especially on LIVE→PASS where the multiplier jumps 60x)
+        simEpochMs = null;
+        simEpochRealMs = null;
 
         const stepBtn = document.getElementById("step-btn");
         stepBtn.style.display = timeMode === "step" ? "block" : "none";
@@ -786,8 +794,11 @@ function startStream() {
         const data = JSON.parse(e.data);
         if (data.error) { console.error("Mesh stream error:", data.error); return; }
         if (data.type === "episode_end") {
-            // Server is resetting for next episode — agents will continue momentarily
-            document.getElementById("ep-id").innerText = `ep_${String(data.next_episode_seed || 0).padStart(6,"0")}`;
+            // Server is resetting for next episode — reset step counter to 0
+            document.getElementById("step-num").innerText = "0";
+            document.getElementById("ep-id").innerText = `ep_${String(data.next_episode_seed || 0).padStart(6, "0")}`;
+            simEpochMs = null;   // re-anchor on the first step of the next episode
+            simEpochRealMs = null;
             return;
         }
         applyMeshState(data);
@@ -1002,11 +1013,13 @@ function animate() {
     // Earth rotation: GMST gives the angle from ECI x-axis to Greenwich meridian.
     // Three.js rotates counterclockwise (from +y), which maps to eastward rotation.
     // Negate so texture moves eastward (west-to-east, matching real Earth spin).
-    // Positive rotation.y in Three.js = counterclockwise from above = west-to-east.
-    // Earth spins west-to-east. GMST increases as it does so.
-    // Therefore earth.rotation.y = +GMST places geography correctly under ECI agents.
-    earth.rotation.y      = gmstFromMs(currentSimMs);
-    atmosphere.rotation.y = gmstFromMs(currentSimMs);
+    // Earth spins around its North Pole axis = scene +z (ECI convention, after the -90x tilt).
+    // rotation.z positive = counterclockwise from above = west-to-east = Earth's real spin.
+    // GMST gives the angle the Greenwich meridian has rotated from ECI +x.
+    // Setting rotation.z = GMST places geography correctly under satellite ECI positions.
+    const gmst = gmstFromMs(currentSimMs);
+    earth.rotation.z      = gmst;
+    atmosphere.rotation.z = gmst;
 
     // Sun position in ECI from Vallado low-precision almanac (same formula as server).
     // JD → Julian centuries → mean longitude → mean anomaly → ecliptic longitude
