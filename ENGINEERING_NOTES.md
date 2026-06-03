@@ -179,5 +179,33 @@ CORS: the Vercel proxy (`api/satellites.js`) handles the TLE fetch. The Three.js
 - On AWS (real CPU): pre-warm completes in ~2 seconds.
 
 **Verified 2026-06-02:** Three LEO agents spawned — TPA-1 (514km), ONEWEB-0227 (1218km), BISONSAT (502km). Spawn in 0.46s.
+Note: these were real catalog satellites elevated to agent status. Fixed in Section 3 (2026-06-03) — agents are now IOLA-SAT-1/2/3.
 
 **Frontend polling:** Button shows "WAKING SERVER…" → pings `/health` → "SPAWNING…" → polls `/mesh/spawn/status` every 3s → shows agents when `state=ready`.
+
+---
+
+## Section 3 — Earth Rotation Sync, Agent Smoothing, Arc, Locate (2026-06-03)
+
+### Four issues fixed
+
+**1. Agent identity:** `_initialise_agent_states()` now assigns `name=IOLA-SAT-N`, `norad_id=IOLA-N`. Real catalog satellites are orbital mechanics templates only, not promoted agents. See phase3_engineering_notes Section 43.2.
+
+**2. Earth rotation vs simulation epoch (geographic correctness bug):**
+The server now returns `sim_epoch_utc` in every step response — the simulation's current UTC time (`snapshot_utc + step × 60s`). The frontend `animate()` computes GMST from this epoch using the IAU formula:
+```
+θ_GMST = (280.46061837 + 360.98564736629 × (JD - 2451545.0)) mod 360°
+```
+Earth now rotates at simulation speed, not wall-clock speed. An agent over Africa at simulation time T appears over Africa on the globe.
+
+**3. Agent position smoothing:**
+The server also returns `vx, vy, vz` per agent. Between server steps, `animate()` extrapolates: `pos_display = (x + vx×Δt_sim, y + vy×Δt_sim, z + vz×Δt_sim) / 1000`. No more jumps. Same principle as Phase 1 BUG-005 fix.
+
+**4. Orbital arc + LOCATE button:**
+- Clicking an agent sphere calls `showArc(idx)` — draws a `THREE.Line` of 91 points tracing 90×60s linear extrapolation steps. Color `#00ffaa`, 35% opacity.
+- Each agent card has a LOCATE button: pans `OrbitControls.target` to the agent and shows its arc.
+- Known limitation: arc is linear extrapolation, not true Keplerian ellipse. Visual error <15km over 90min. Phase 4: replace with Keplerian JS propagator.
+
+### API additions (server)
+- `_agent_to_dict()` adds `vx, vy, vz`
+- `_env_state()` adds `sim_epoch_utc`

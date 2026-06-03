@@ -142,6 +142,16 @@
         border: 1px solid rgba(255,165,0,0.3);
         color: orange; margin-right: 4px;
     }
+
+    /* Locate button in agent card */
+    .locate-btn {
+        margin-top: 6px; width: 100%;
+        padding: 3px 0; font-size: 9px; letter-spacing: 0.08em;
+        background: rgba(0,255,170,0.08); color: #00ffaa;
+        border: 1px solid rgba(0,255,170,0.25); border-radius: 2px;
+        cursor: pointer; font-family: inherit;
+    }
+    .locate-btn:hover { background: rgba(0,255,170,0.18); }
     </style>
 </head>
 <body>
@@ -421,16 +431,32 @@ const propagateLoop = setInterval(() => {
 }, 250);
 
 // ─── IkirereMesh state ────────────────────────────────────────────────────────
-let meshActive  = false;
-let meshAgents  = [];      // latest agent state from API
-let meshWS      = null;
-let timeMode    = "realtime";   // Default: LIVE real time
+let meshActive   = false;
+let meshAgents   = [];      // latest agent state from API
+let meshWS       = null;
+let timeMode     = "realtime";   // Default: LIVE real time
 let wsManualStep = null;   // resolve function for step-mode promise
+
+// sim_epoch_utc: the simulation's current UTC time (ISO string) from the server.
+// Used to drive Earth rotation so ECI positions map to correct geography.
+let simEpochMs   = null;   // ms since unix epoch of last received sim_epoch_utc
+let simEpochRealMs = null; // wall-clock ms when that epoch was received
+// Per-agent velocity for client-side extrapolation between server steps
+let agentVelocities = {};  // norad_id → {vx, vy, vz} in km/s
 
 // Convert ECI km → Three.js scene units (Earth radius = 6.371 scene units)
 function eciToScene(x, y, z) {
     const scale = 1 / 1000;  // 1000 km = 1 scene unit
     return new THREE.Vector3(x * scale, y * scale, z * scale);
+}
+
+// GMST from a Unix timestamp in ms.
+// θ = 280.46061837 + 360.98564736629 × (JD - 2451545.0)  [degrees]
+// JD = unixMs / 86400000 + 2440587.5
+function gmstFromMs(unixMs) {
+    const jd      = unixMs / 86400000 + 2440587.5;
+    const deg     = 280.46061837 + 360.98564736629 * (jd - 2451545.0);
+    return (deg % 360) * Math.PI / 180;
 }
 
 const MODE_COLORS = {
@@ -515,7 +541,21 @@ function renderAgentCards(agents) {
             status.append(" ", badge);
         }
 
-        card.append(header, bars, status);
+        // LOCATE button — pans camera to this agent and shows its arc
+        const locateBtn = document.createElement("button");
+        locateBtn.className = "locate-btn";
+        locateBtn.textContent = "LOCATE";
+        locateBtn.addEventListener("click", () => {
+            const idx = meshAgents.findIndex(a => a.norad_id === agent.norad_id);
+            showArc(idx);
+            if (idx >= 0 && agentMeshes[idx]) {
+                // Move OrbitControls target to the agent's current position
+                controls.target.copy(agentMeshes[idx].position);
+                controls.update();
+            }
+        });
+
+        card.append(header, bars, status, locateBtn);
         container.appendChild(card);
     });
 }
@@ -529,6 +569,18 @@ function updateStepDisplay(step, episodeId) {
 
 function applyMeshState(data) {
     meshAgents = data.agents || [];
+
+    // Record simulation epoch for Earth rotation sync
+    if (data.sim_epoch_utc) {
+        simEpochMs     = new Date(data.sim_epoch_utc).getTime();
+        simEpochRealMs = Date.now();
+    }
+
+    // Store velocities for per-frame Keplerian extrapolation
+    meshAgents.forEach(a => {
+        if (a.vx !== undefined) agentVelocities[a.norad_id] = { vx: a.vx, vy: a.vy, vz: a.vz };
+    });
+
     updateAgentMeshes(meshAgents);
     renderAgentCards(meshAgents);
     if (data.episode_step !== undefined) updateStepDisplay(data.episode_step, data.episode_id);
@@ -658,6 +710,54 @@ document.getElementById("pause-btn").addEventListener("click", () => {
     document.getElementById("pause-btn").innerText = paused ? "RESUME" : "PAUSE";
 });
 
+// ─── Orbital arc visualization ────────────────────────────────────────────────
+// One arc line per agent, shown when that agent is clicked.
+const arcLines = [];   // THREE.Line objects, one per possible agent
+const ARC_MATERIAL = new THREE.LineBasicMaterial({
+    color: 0x00ffaa, transparent: true, opacity: 0.35, depthWrite: false
+});
+
+function buildArc(agent) {
+    // Trace 90 × 60s Keplerian steps from agent's current position using
+    // linear extrapolation. Good enough for display at orbital scale.
+    // Phase 4: replace with proper Keplerian propagator call.
+    const scale = 1 / 1000;
+    const pts   = [];
+    let x = agent.x, y = agent.y, z = agent.z;
+    const vel = agentVelocities[agent.norad_id] || { vx: 0, vy: 0, vz: 0 };
+    const dt  = 60; // seconds per step
+    for (let s = 0; s <= 90; s++) {
+        pts.push(new THREE.Vector3(
+            (x + vel.vx * s * dt) * scale,
+            (y + vel.vy * s * dt) * scale,
+            (z + vel.vz * s * dt) * scale,
+        ));
+    }
+    return new THREE.BufferGeometry().setFromPoints(pts);
+}
+
+let activeArcIndex = -1;  // which agent arc is currently shown
+
+function showArc(agentIndex) {
+    // Hide all arcs first
+    arcLines.forEach(l => { l.visible = false; });
+
+    if (agentIndex < 0 || agentIndex >= meshAgents.length) { activeArcIndex = -1; return; }
+    const agent = meshAgents[agentIndex];
+
+    // Grow pool if needed
+    while (arcLines.length <= agentIndex) {
+        const line = new THREE.Line(new THREE.BufferGeometry(), ARC_MATERIAL.clone());
+        scene.add(line);
+        arcLines.push(line);
+    }
+
+    arcLines[agentIndex].geometry.dispose();
+    arcLines[agentIndex].geometry = buildArc(agent);
+    arcLines[agentIndex].visible  = true;
+    activeArcIndex = agentIndex;
+}
+
 // ─── Click inspector ──────────────────────────────────────────────────────────
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -668,10 +768,15 @@ renderer.domElement.addEventListener("click", (e) => {
     raycaster.setFromCamera(mouse, camera);
 
     // Check IOLA agents first (spheres, exact hit)
-    const agentHits = raycaster.intersectObjects(agentMeshes.filter(m => m.visible));
+    const visibleAgentMeshes = agentMeshes.filter(m => m.visible);
+    const agentHits = raycaster.intersectObjects(visibleAgentMeshes);
     if (agentHits.length > 0) {
         const agent = agentHits[0].object.userData;
         if (agent && agent.norad_id) {
+            // Find index into meshAgents for arc drawing
+            const idx = meshAgents.findIndex(a => a.norad_id === agent.norad_id);
+            showArc(idx);
+
             document.getElementById("inspector-name").innerText  = agent.name;
             document.getElementById("inspector-norad").innerText = agent.norad_id;
             document.getElementById("inspector-class").innerText = "LEO (IOLA)";
@@ -716,9 +821,46 @@ renderer.domElement.addEventListener("click", (e) => {
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
-    const earthAngle = (Date.now() / 86164100) * Math.PI * 2;
-    earth.rotation.y     = earthAngle;
-    atmosphere.rotation.y = earthAngle;
+
+    // Earth rotation: use simulation epoch when agents are active so the
+    // geographic position of ECI coordinates is correct. Falls back to
+    // real-time wall clock when no episode is running.
+    let earthRotAngle;
+    if (meshActive && simEpochMs !== null) {
+        // Extrapolate simulation time forward from the last received step.
+        // In LIVE mode, 1 real second = 60 simulated seconds.
+        const realElapsedMs = Date.now() - simEpochRealMs;
+        const mult = TIME_MULTIPLIERS[timeMode] ?? 1;
+        const currentSimMs = simEpochMs + realElapsedMs * mult;
+        earthRotAngle = gmstFromMs(currentSimMs);
+    } else {
+        earthRotAngle = gmstFromMs(Date.now());
+    }
+    earth.rotation.y      = earthRotAngle;
+    atmosphere.rotation.y = earthRotAngle;
+
+    // Smooth agent positions between server steps using linear Keplerian extrapolation.
+    // The server sends (x,y,z) at step N and (vx,vy,vz) in km/s.
+    // Each frame we apply: pos += vel × Δt_simulated to keep agents moving continuously.
+    if (meshActive && simEpochMs !== null) {
+        const realElapsedS = (Date.now() - simEpochRealMs) / 1000;
+        const mult = TIME_MULTIPLIERS[timeMode] ?? 1;
+        const simElapsedS = realElapsedS * mult;
+
+        agentMeshes.forEach((mesh, i) => {
+            if (!mesh.visible || !meshAgents[i]) return;
+            const a   = meshAgents[i];
+            const vel = agentVelocities[a.norad_id];
+            if (!vel) return;
+            const scale = 1 / 1000;
+            mesh.position.set(
+                (a.x + vel.vx * simElapsedS) * scale,
+                (a.y + vel.vy * simElapsedS) * scale,
+                (a.z + vel.vz * simElapsedS) * scale,
+            );
+        });
+    }
+
     renderer.render(scene, camera);
 }
 
