@@ -705,11 +705,15 @@ document.getElementById("spawn-btn").addEventListener("click", async () => {
         const spawnData = await spawnRes.json();
         if (spawnData.state === "error") { btn.disabled = false; btn.innerText = "SPAWN FLEET"; alert(spawnData.error); return; }
 
-        // Step 3: poll /mesh/spawn/status until ready
+        // Step 3: poll /mesh/spawn/status until ready.
+        // Render free tier pre-warm takes up to 5 min on cold start — poll for 7 min.
         let ready = false;
-        for (let poll = 0; poll < 60; poll++) {
+        for (let poll = 0; poll < 140; poll++) {
             await new Promise(r => setTimeout(r, 3000));
-            btn.innerText = `SPAWNING… ${(poll+1)*3}s`;
+            const elapsed = Math.round((poll+1)*3);
+            btn.innerText = elapsed < 60
+                ? `SPAWNING… ${elapsed}s`
+                : `SPAWNING… ${Math.floor(elapsed/60)}m ${elapsed%60}s`;
             try {
                 const s = await fetch(`${API_BASE}/mesh/spawn/status`, { signal: AbortSignal.timeout(5000) });
                 const sd = await s.json();
@@ -910,22 +914,39 @@ function animate() {
     requestAnimationFrame(animate);
     controls.update();
 
-    // Earth rotation: use simulation epoch when agents are active so the
-    // geographic position of ECI coordinates is correct. Falls back to
-    // real-time wall clock when no episode is running.
-    let earthRotAngle;
+    // Current simulation time in ms — drives Earth rotation and Sun position
+    let currentSimMs;
     if (meshActive && simEpochMs !== null) {
-        // Extrapolate simulation time forward from the last received step.
-        // In LIVE mode, 1 real second = 60 simulated seconds.
         const realElapsedMs = Date.now() - simEpochRealMs;
         const mult = TIME_MULTIPLIERS[timeMode] ?? 1;
-        const currentSimMs = simEpochMs + realElapsedMs * mult;
-        earthRotAngle = gmstFromMs(currentSimMs);
+        currentSimMs = simEpochMs + realElapsedMs * mult;
     } else {
-        earthRotAngle = gmstFromMs(Date.now());
+        currentSimMs = Date.now();
     }
-    earth.rotation.y      = earthRotAngle;
-    atmosphere.rotation.y = earthRotAngle;
+
+    // Earth rotation: GMST gives the angle from ECI x-axis to Greenwich meridian.
+    // Three.js rotates counterclockwise (from +y), which maps to eastward rotation.
+    // Negate so texture moves eastward (west-to-east, matching real Earth spin).
+    earth.rotation.y      = -gmstFromMs(currentSimMs);
+    atmosphere.rotation.y = -gmstFromMs(currentSimMs);
+
+    // Sun position in ECI from Vallado low-precision almanac (same formula as server).
+    // JD → Julian centuries → mean longitude → mean anomaly → ecliptic longitude
+    // → Sun ECI vector. The light and visual Sun sphere track the real Sun direction.
+    (function updateSun() {
+        const jd  = currentSimMs / 86400000 + 2440587.5;
+        const T   = (jd - 2451545.0) / 36525.0;
+        const L   = (280.460 + 36000.771 * T) % 360;
+        const M   = (357.528 + 35999.050 * T) * Math.PI / 180;
+        const lam = (L + 1.915 * Math.sin(M) + 0.020 * Math.sin(2*M)) * Math.PI / 180;
+        const eps = (23.439 - 0.0130 * T) * Math.PI / 180;
+        const r   = (1.000140 - 0.016708 * Math.cos(M) - 0.000141 * Math.cos(2*M)) * 1.495978707e8;
+        const sx  = r * Math.cos(lam) / 1000;
+        const sy  = r * Math.sin(lam) * Math.cos(eps) / 1000;
+        const sz  = r * Math.sin(lam) * Math.sin(eps) / 1000;
+        light.position.set(sx, sy, sz);
+        sun.position.set(sx, sy, sz);
+    })();
 
     // Per-frame agent update: Keplerian extrapolation + ring billboard + label follow
     if (meshActive && simEpochMs !== null) {
