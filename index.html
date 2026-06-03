@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <link rel="stylesheet" href="./styles.css">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23000000'/%3E%3Cimage href='./iola-logo-space.png' x='4' y='4' width='24' height='24' clip-path='url(%23c)'/%3E%3CclipPath id='c'%3E%3Ccircle cx='16' cy='16' r='12'/%3E%3C/clipPath%3E%3C/svg%3E">
     <title>IOLA Orbit — Command Center</title>
     <script type="importmap">
     {
@@ -327,9 +328,34 @@ const classPts  = classGeos.map((geo, i) => {
     return pts;
 });
 
-// IOLA agent spheres — large, bright white core, visible at any zoom
-const agentMeshes = [];
-const AGENT_SPHERE = new THREE.SphereGeometry(0.18, 16, 16);
+// IOLA agent rendering — ring reticle + central dot + name label
+// Each agent has three scene objects kept in parallel arrays:
+//   agentDots[]   — THREE.Points (1 point), color-coded, size 0.10
+//   agentRings[]  — THREE.Mesh(RingGeometry), billboarded to camera
+//   agentLabels[] — THREE.Sprite with canvas texture (name + mode)
+// agentMeshes[] mirrors agentDots[] for raycaster compatibility
+const agentDots   = [];
+const agentRings  = [];
+const agentLabels = [];
+const agentMeshes = [];   // alias to agentDots for raycaster + arc code
+
+const RING_GEO = new THREE.RingGeometry(0.13, 0.17, 32);
+
+function makeLabel(text) {
+    const canvas  = document.createElement("canvas");
+    canvas.width  = 256; canvas.height = 48;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, 256, 48);
+    ctx.font      = "bold 20px monospace";
+    ctx.fillStyle = "rgba(0,255,170,0.9)";
+    ctx.textAlign = "center";
+    ctx.fillText(text, 128, 30);
+    const tex    = new THREE.CanvasTexture(canvas);
+    const mat    = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(0.9, 0.18, 1);
+    return sprite;
+}
 
 // Ground station markers — parented to Earth so they rotate with it
 // Three.js Earth: lon=0 is at (0,0,-R) with no rotation; positive lon goes west in default orientation.
@@ -471,23 +497,71 @@ const MODE_COLORS = {
 };
 
 function updateAgentMeshes(agents) {
-    // Grow pool
-    while (agentMeshes.length < agents.length) {
-        const mat  = new THREE.MeshPhongMaterial({ emissive: 0xff3a6e, emissiveIntensity: 1.5, color: 0xffffff });
-        const mesh = new THREE.Mesh(AGENT_SPHERE, mat);
-        scene.add(mesh);
-        agentMeshes.push(mesh);
+    // Grow pool — one dot + ring + label per agent
+    while (agentDots.length < agents.length) {
+        // Dot: single bright point, color-coded
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
+        const dot = new THREE.Points(geo, new THREE.PointsMaterial({
+            color: 0xff3a6e, size: 0.10, sizeAttenuation: true, depthWrite: false
+        }));
+        scene.add(dot);
+        agentDots.push(dot);
+        agentMeshes.push(dot);   // keep alias in sync
+
+        // Ring: flat annulus, billboarded to camera each frame
+        const ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({
+            color: 0xff3a6e, transparent: true, opacity: 0.85,
+            side: THREE.DoubleSide, depthWrite: false
+        }));
+        scene.add(ring);
+        agentRings.push(ring);
+
+        // Label sprite
+        const lbl = makeLabel("IOLA-SAT");
+        scene.add(lbl);
+        agentLabels.push(lbl);
     }
-    for (let i = agents.length; i < agentMeshes.length; i++) agentMeshes[i].visible = false;
+
+    // Hide unused slots
+    for (let i = agents.length; i < agentDots.length; i++) {
+        agentDots[i].visible  = false;
+        agentRings[i].visible = false;
+        agentLabels[i].visible = false;
+    }
 
     agents.forEach((agent, i) => {
         const pos = eciToScene(agent.x, agent.y, agent.z);
-        agentMeshes[i].position.copy(pos);
-        agentMeshes[i].visible = true;
-        agentMeshes[i].userData = agent;
         const hex = MODE_COLORS[agent.mode] || 0xff3a6e;
-        agentMeshes[i].material.emissive.setHex(hex);
-        agentMeshes[i].material.color.setHex(hex);
+
+        // Dot
+        agentDots[i].geometry.attributes.position.setXYZ(0, pos.x, pos.y, pos.z);
+        agentDots[i].geometry.attributes.position.needsUpdate = true;
+        agentDots[i].material.color.setHex(hex);
+        agentDots[i].visible  = true;
+        agentDots[i].userData = agent;
+
+        // Ring
+        agentRings[i].position.copy(pos);
+        agentRings[i].material.color.setHex(hex);
+        agentRings[i].visible = true;
+
+        // Label — positioned slightly above
+        agentLabels[i].position.set(pos.x, pos.y + 0.28, pos.z);
+        // Rebuild label text only if name or mode changed
+        const labelText = `${agent.name || "IOLA"} · ${(agent.mode||"").replace("_"," ")}`;
+        if (agentLabels[i].userData.lastText !== labelText) {
+            agentLabels[i].userData.lastText = labelText;
+            const canvas = agentLabels[i].material.map.image;
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, 256, 48);
+            ctx.font      = "bold 18px monospace";
+            ctx.fillStyle = `#${hex.toString(16).padStart(6,"0")}`;
+            ctx.textAlign = "center";
+            ctx.fillText(labelText, 128, 30);
+            agentLabels[i].material.map.needsUpdate = true;
+        }
+        agentLabels[i].visible = true;
     });
 }
 
@@ -548,9 +622,9 @@ function renderAgentCards(agents) {
         locateBtn.addEventListener("click", () => {
             const idx = meshAgents.findIndex(a => a.norad_id === agent.norad_id);
             showArc(idx);
-            if (idx >= 0 && agentMeshes[idx]) {
+            if (idx >= 0 && agentRings[idx]) {
                 // Move OrbitControls target to the agent's current position
-                controls.target.copy(agentMeshes[idx].position);
+                controls.target.copy(agentRings[idx].position);
                 controls.update();
             }
         });
@@ -567,13 +641,31 @@ function updateStepDisplay(step, episodeId) {
     document.getElementById("ep-id").innerText = episodeId ? episodeId.substring(0,12) : "—";
 }
 
+// Step interval expected by the server for each time mode (real ms between steps).
+// Used for dead reckoning — we advance the reference clock by this amount on each
+// step arrival instead of resetting to Date.now(), eliminating network jitter.
+const STEP_INTERVAL_MS = { realtime: 60000, compressed: 1000, step: null };
+
 function applyMeshState(data) {
     meshAgents = data.agents || [];
 
-    // Record simulation epoch for Earth rotation sync
+    // Dead reckoning: advance simEpochRealMs by the expected interval rather than
+    // resetting to Date.now(). This keeps extrapolation continuous across steps
+    // regardless of network timing variability (eliminates PASS mode jitter).
     if (data.sim_epoch_utc) {
-        simEpochMs     = new Date(data.sim_epoch_utc).getTime();
-        simEpochRealMs = Date.now();
+        const newEpochMs = new Date(data.sim_epoch_utc).getTime();
+        if (simEpochMs === null) {
+            // First step: anchor to real time
+            simEpochRealMs = Date.now();
+        } else {
+            const interval = STEP_INTERVAL_MS[timeMode];
+            if (interval !== null) {
+                simEpochRealMs += interval;
+            } else {
+                simEpochRealMs = Date.now();  // STEP mode: manual, always anchor to now
+            }
+        }
+        simEpochMs = newEpochMs;
     }
 
     // Store velocities for per-frame Keplerian extrapolation
@@ -762,8 +854,9 @@ renderer.domElement.addEventListener("click", (e) => {
     mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
 
-    // Check IOLA agents first (spheres, exact hit)
-    const visibleAgentMeshes = agentMeshes.filter(m => m.visible);
+    // Check IOLA agents first — dots (Points), threshold scales with zoom
+    raycaster.params.Points.threshold = camera.position.length() * 0.012;
+    const visibleAgentMeshes = agentDots.filter(m => m.visible);
     const agentHits = raycaster.intersectObjects(visibleAgentMeshes);
     if (agentHits.length > 0) {
         const agent = agentHits[0].object.userData;
@@ -834,25 +927,32 @@ function animate() {
     earth.rotation.y      = earthRotAngle;
     atmosphere.rotation.y = earthRotAngle;
 
-    // Smooth agent positions between server steps using linear Keplerian extrapolation.
-    // The server sends (x,y,z) at step N and (vx,vy,vz) in km/s.
-    // Each frame we apply: pos += vel × Δt_simulated to keep agents moving continuously.
+    // Per-frame agent update: Keplerian extrapolation + ring billboard + label follow
     if (meshActive && simEpochMs !== null) {
         const realElapsedS = (Date.now() - simEpochRealMs) / 1000;
         const mult = TIME_MULTIPLIERS[timeMode] ?? 1;
-        const simElapsedS = realElapsedS * mult;
+        const simElapsedS  = realElapsedS * mult;
+        const scale = 1 / 1000;
 
-        agentMeshes.forEach((mesh, i) => {
-            if (!mesh.visible || !meshAgents[i]) return;
-            const a   = meshAgents[i];
+        meshAgents.forEach((a, i) => {
+            if (!agentDots[i] || !agentDots[i].visible) return;
             const vel = agentVelocities[a.norad_id];
             if (!vel) return;
-            const scale = 1 / 1000;
-            mesh.position.set(
-                (a.x + vel.vx * simElapsedS) * scale,
-                (a.y + vel.vy * simElapsedS) * scale,
-                (a.z + vel.vz * simElapsedS) * scale,
-            );
+
+            const px = (a.x + vel.vx * simElapsedS) * scale;
+            const py = (a.y + vel.vy * simElapsedS) * scale;
+            const pz = (a.z + vel.vz * simElapsedS) * scale;
+
+            // Move dot
+            agentDots[i].geometry.attributes.position.setXYZ(0, px, py, pz);
+            agentDots[i].geometry.attributes.position.needsUpdate = true;
+
+            // Move ring + billboard to camera
+            agentRings[i].position.set(px, py, pz);
+            agentRings[i].quaternion.copy(camera.quaternion);
+
+            // Move label above dot
+            agentLabels[i].position.set(px, py + 0.28, pz);
         });
     }
 
