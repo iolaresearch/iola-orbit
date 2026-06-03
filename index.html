@@ -1018,11 +1018,16 @@ function animate() {
         const lam = (L + 1.915 * Math.sin(M) + 0.020 * Math.sin(2*M)) * Math.PI / 180;
         const eps = (23.439 - 0.0130 * T) * Math.PI / 180;
         const r   = (1.000140 - 0.016708 * Math.cos(M) - 0.000141 * Math.cos(2*M)) * 1.495978707e8;
-        const sx  = r * Math.cos(lam) / 1000;
-        const sy  = r * Math.sin(lam) * Math.cos(eps) / 1000;
-        const sz  = r * Math.sin(lam) * Math.sin(eps) / 1000;
-        light.position.set(sx, sy, sz);
-        sun.position.set(sx, sy, sz);
+        // ECI Sun vector: x toward vernal equinox, y 90° east in equatorial plane, z toward North Pole.
+        // Three.js globe uses y-up (North = +y), so we remap: scene_y = eci_z, scene_z = -eci_y.
+        const eci_x = r * Math.cos(lam);
+        const eci_y = r * Math.sin(lam) * Math.cos(eps);
+        const eci_z = r * Math.sin(lam) * Math.sin(eps);
+        const scene_x =  eci_x / 1000;
+        const scene_y =  eci_z / 1000;   // ECI North Pole → Three.js up
+        const scene_z = -eci_y / 1000;   // ECI equatorial east → Three.js -z
+        light.position.set(scene_x, scene_y, scene_z);
+        sun.position.set(scene_x, scene_y, scene_z);
     })();
 
     // Per-frame agent update: Keplerian extrapolation + ring billboard + label follow
