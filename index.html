@@ -683,6 +683,8 @@ document.getElementById("spawn-btn").addEventListener("click", async () => {
     btn.innerText = "SPAWNING…";
 
     const fleetSize = parseInt(document.getElementById("fleet-size").value) || 3;
+    // Signal intentional stop so auto-reconnect doesn't fire during restart
+    meshActive = false;
     if (meshWS) { meshWS.close(); meshWS = null; }
 
     try {
@@ -694,11 +696,11 @@ document.getElementById("spawn-btn").addEventListener("click", async () => {
             await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) });
         } catch(_) {}   // proceed regardless — spawn will surface the real error
 
-        // Step 2: kick off spawn (returns immediately with state=running or state=ready)
+        // Step 2: kick off spawn (returns immediately — no timeout, server responds fast)
         btn.innerText = "SPAWNING…";
         const spawnRes = await fetch(
             `${API_BASE}/mesh/spawn?fleet_size=${fleetSize}&seed=42`,
-            { method: "POST", signal: AbortSignal.timeout(15000) }
+            { method: "POST" }
         );
         const spawnData = await spawnRes.json();
         if (spawnData.state === "error") { btn.disabled = false; btn.innerText = "SPAWN FLEET"; alert(spawnData.error); return; }
@@ -768,7 +770,15 @@ document.getElementById("step-btn").addEventListener("click", () => {
 });
 
 // ─── WebSocket stream ─────────────────────────────────────────────────────────
+// The stream is designed to be permanent for the lifetime of the browser tab.
+// The server loops episodes automatically — the WebSocket never closes from the
+// server side. If it closes unexpectedly (network blip, Render restart),
+// we reconnect after a short delay so the view resumes without user action.
+
+let _streamReconnectTimer = null;
+
 function startStream() {
+    if (_streamReconnectTimer) { clearTimeout(_streamReconnectTimer); _streamReconnectTimer = null; }
     const ws = new WebSocket(`${WS_BASE}/mesh/stream?mode=${timeMode}`);
     meshWS = ws;
 
@@ -776,14 +786,24 @@ function startStream() {
         const data = JSON.parse(e.data);
         if (data.error) { console.error("Mesh stream error:", data.error); return; }
         if (data.type === "episode_end") {
-            console.log("Episode complete at step", data.step);
+            // Server is resetting for next episode — agents will continue momentarily
+            document.getElementById("ep-id").innerText = `ep_${String(data.next_episode_seed || 0).padStart(6,"0")}`;
             return;
         }
         applyMeshState(data);
     };
 
-    ws.onerror  = (e) => console.error("WS error", e);
-    ws.onclose  = ()  => { if (meshWS === ws) meshWS = null; };
+    ws.onerror = (e) => console.error("WS error", e);
+
+    ws.onclose = () => {
+        if (meshWS !== ws) return;   // was replaced intentionally (time mode switch)
+        meshWS = null;
+        if (!meshActive) return;     // session was deliberately ended
+        // Unexpected close — wait 3s then reconnect silently
+        _streamReconnectTimer = setTimeout(() => {
+            if (meshActive) startStream();
+        }, 3000);
+    };
 }
 
 // ─── Filters & UI ─────────────────────────────────────────────────────────────
