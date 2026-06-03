@@ -1,7 +1,7 @@
 # IOLA Orbit Client — Engineering Notes
 ## Visual Command Center / Frontend Visualiser
 
-**Status:** Phase 3 command center deployed, spawn pending fix  
+**Status:** Phase 3 command center COMPLETE AND VALIDATED — 2026-06-03  
 **Period:** 2026-05-15 onward  
 **Engineers:** Jason Quist (Founder & CEO) · Claude (Chief Research Scientist / Systems Architect)  
 **Repository:** iolaresearch/iola-orbit (PUBLIC)  
@@ -209,3 +209,108 @@ The server also returns `vx, vy, vz` per agent. Between server steps, `animate()
 ### API additions (server)
 - `_agent_to_dict()` adds `vx, vy, vz`
 - `_env_state()` adds `sim_epoch_utc`
+
+---
+
+## Section 4 — Visual Command Center: Full Session Record (2026-06-03)
+
+*Written: 2026-06-03 · Jason Quist + Claude*
+
+### 4.1 What Was Built and Validated
+
+The IkirereMesh visual command center at orbit.ikirere.com is now fully operational. Validated live in the browser on 2026-06-03 by Jason Quist.
+
+**Confirmed working:**
+- 15,428 satellites rendering in real time via satellite.js SGP4 Web Worker
+- IOLA-SAT-1/2/3 spawning as synthetic agents (not promoted catalog satellites)
+- Ring reticle + name label per agent, color-coded by operational mode
+- Orbital arc per agent (Keplerian RK4, one full LEO pass, 90 steps × 60s)
+- LOCATE button animates camera fly-to with quadratic ease-in-out
+- LIVE and PASS observation modes with smooth agent motion (dead reckoning)
+- Accra and Kigali ground stations correctly positioned on Africa
+- Day/night terminator driven by Vallado solar almanac at simulation epoch
+- Earth rotation driven by GMST at simulation epoch (not wall clock)
+- Episodes loop continuously — WebSocket never closes from server side
+- Auto-reconnect after 3 seconds on unexpected disconnect
+- Favicon: circular IOLA logo SVG inline data-URI
+
+### 4.2 Coordinate System — Final Resolution (BUG-P3-026 extended)
+
+This was the hardest visual problem of the session. Three separate coordinate system errors were fixed:
+
+**Error 1 — Earth rotation wall-clock vs simulation epoch**
+`earth.rotation.y = (Date.now() / 86164100) × 2π` used wall clock. In LIVE mode (1 step/second = 60 simulated seconds), after 10 real steps Earth had only rotated 10 real seconds but agent positions were 10 simulated minutes ahead. Fixed: GMST computed from `sim_epoch_utc` returned by server.
+
+**Error 2 — Earth rotation direction reversed**
+Set to `-gmst` during one session. Earth spun east-to-west. Fixed to `+gmst`. Positive `rotation.y` in Three.js = counterclockwise from above North Pole = west-to-east = correct.
+
+**Error 3 — Sun ECI to Three.js coordinate remap missing**
+The Vallado formula gives ECI: `x=equinox, y=equatorial-east, z=North Pole`. Three.js globe uses y-up (North = +y). Placing the ECI vector directly into scene coordinates put the Sun's large equatorial `eci_y` component at scene `+y` (North Pole direction), creating a shadow band around the equator instead of the correct day/night terminator.
+
+Fix: explicit remap applied to Sun position before setting `light.position`:
+```javascript
+scene_x =  eci_x / 1000        // equatorial, unchanged
+scene_y =  eci_z / 1000        // ECI North Pole → Three.js up
+scene_z = -eci_y / 1000        // ECI east → Three.js -z
+```
+
+**Rule:** Any ECI vector placed into the Three.js scene must apply this remap. The satellite positions from the SGP4 worker are placed as raw ECI (x,y,z) which are consistent with each other even if the axes differ from Three.js convention. The Sun and ground stations interact with the textured globe which uses Three.js y-up — they must be remapped.
+
+### 4.3 PASS Mode Dead Reckoning (BUG-FC-001)
+
+**Problem:** Switching from LIVE to PASS caused agents to instantly fly off to wrong positions.
+
+**Root cause:** Dead reckoning anchors `simEpochRealMs` to when the last step arrived. In LIVE mode steps arrive every 60 real seconds. Switching to PASS (60× multiplier) immediately: `simElapsedS = 60s × 60 = 3,600 simulated seconds`. One frame of extrapolation moved agents ~27,000 km.
+
+**Fix:** Reset `simEpochMs = null` and `simEpochRealMs = null` on every mode switch. The first `applyMeshState` call in the new mode re-anchors from scratch. Applied also on `episode_end` so each new episode begins with a clean anchor.
+
+### 4.4 WebSocket Permanence (BUG-FC-002)
+
+**Problem:** Stream closed after 90 steps. Session died silently after ~30 minutes.
+
+**Root cause:** Server `while current_step < 90` loop exited and closed the WebSocket. The command center is a permanent live view, not a training run. The 90-step episode boundary is a training concept.
+
+**Fix:** Server stream handler now has an outer `while True` loop. After 90 steps, `env.reset(seed+1)` and continue. The WebSocket connection is held for the full browser session. Frontend auto-reconnects after 3 seconds on unexpected close. `AbortSignal.timeout(15000)` removed from spawn POST.
+
+### 4.5 Orbital Arc — Keplerian RK4
+
+Arc drawing replaced linear extrapolation with RK4 two-body integration. Same physics as server `propagate_orbit_forward()`. 90 × 60s steps = one full LEO pass. Produces a closed ellipse. The JavaScript implementation:
+
+```javascript
+// μ = 398600.4418 km³/s² (Earth gravitational parameter, WGS84)
+function keplerRK4(rx, ry, rz, vx, vy, vz, dt) {
+    function accel(x, y, z) {
+        const r3 = Math.pow(x*x + y*y + z*z, 1.5);
+        return [-MU*x/r3, -MU*y/r3, -MU*z/r3];
+    }
+    // 4-stage Runge-Kutta integration
+    ...
+}
+```
+
+### 4.6 Agent Visual — Ring Reticle (Industry Standard)
+
+The large sphere was replaced with a ring reticle — the standard used in STK, Celestrak, and NASA Eyes:
+
+- **Dot:** `THREE.Points`, size 0.10 (2× background, proportionally correct)
+- **Ring:** `THREE.RingGeometry`, billboarded to camera via `ring.quaternion.copy(camera.quaternion)` each frame
+- **Label:** `THREE.Sprite` with canvas texture, shows `IOLA-SAT-N · MODE`
+
+Color-coded by operational mode: IMAGING=green, DOWNLINK=cyan, YIELD_COVERAGE=orange, IDLE=pink, SAFE_MODE=red.
+
+### 4.7 Known Issues (Carry Forward to Next Session)
+
+- **Shadow/terminator geographic accuracy:** The day/night line is now physically correct (Vallado Sun + GMST Earth rotation), but the exact geographic boundary has not been validated against a reference (e.g. NASA Worldview). Validate before paper submission.
+- **Satellite smoothness on Render:** Background 15k satellites still step at 250ms intervals due to Render free tier latency. Resolves on AWS migration.
+- **Multi-user:** One global spawn state on server. Concurrent users share one episode. Fix: session-scoped environments (Stage 4 infrastructure).
+
+### 4.8 Documentation Standard Applied (2026-06-03)
+
+Jason Quist enforced the CLAUDE.md documentation policy: every file, every function, every variable must be documented in plain English. Applied to `api.py` in full:
+- Private underscore names replaced with descriptive names
+- Every endpoint has a docstring explaining what it does, why, and what to expect
+- Module-level architecture, boundaries, and pre-warm behaviour documented inline
+- Naming convention table recorded in phase3_engineering_notes Section 45.1
+
+*Signed: Jason Quist (Founder & CEO) · Claude (Chief Research Scientist / Systems Architect)*
+*Phase 3 visual command center complete. 2026-06-03.*
