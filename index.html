@@ -596,21 +596,16 @@ document.getElementById("spawn-btn").addEventListener("click", async () => {
     if (meshWS) { meshWS.close(); meshWS = null; }
 
     try {
-        // Step 1: wake the server (Render free tier cold-starts in 30-60s)
-        btn.innerText = "WAKING SERVER…";
-        let healthOk = false;
-        for (let attempt = 0; attempt < 12; attempt++) {
-            try {
-                const h = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(8000) });
-                if (h.ok) { healthOk = true; break; }
-            } catch(_) {}
-            btn.innerText = `WAKING SERVER… (${(attempt+1)*8}s)`;
-            await new Promise(r => setTimeout(r, 1000));
-        }
-        if (!healthOk) { btn.disabled = false; btn.innerText = "SPAWN FLEET"; alert("Server is offline. Check Render dashboard."); return; }
+        // Step 1: single health check — if it responds, proceed; if not, still try spawn.
+        // The server may be alive (serving /tles) even if /health cold-starts slowly.
+        // We never block spawn on health; it is informational only.
+        btn.innerText = "CONNECTING…";
+        try {
+            await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) });
+        } catch(_) {}   // proceed regardless — spawn will surface the real error
 
-        // Step 2: kick off spawn (returns immediately with state=running)
-        btn.innerText = "SPAWNING… (60-90s on free server)";
+        // Step 2: kick off spawn (returns immediately with state=running or state=ready)
+        btn.innerText = "SPAWNING…";
         const spawnRes = await fetch(
             `${API_BASE}/mesh/spawn?fleet_size=${fleetSize}&seed=42`,
             { method: "POST", signal: AbortSignal.timeout(15000) }
