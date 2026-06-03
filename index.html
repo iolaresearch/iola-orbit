@@ -623,9 +623,7 @@ function renderAgentCards(agents) {
             const idx = meshAgents.findIndex(a => a.norad_id === agent.norad_id);
             showArc(idx);
             if (idx >= 0 && agentRings[idx]) {
-                // Move OrbitControls target to the agent's current position
-                controls.target.copy(agentRings[idx].position);
-                controls.update();
+                flyToAgent(agentRings[idx].position.clone());
             }
         });
 
@@ -801,6 +799,31 @@ document.getElementById("pause-btn").addEventListener("click", () => {
     document.getElementById("pause-btn").innerText = paused ? "RESUME" : "PAUSE";
 });
 
+// ─── Camera fly-to ───────────────────────────────────────────────────────────
+// Animated lerp from current camera position to a point ~2× closer to the target.
+// Runs over ~60 frames (≈1 second at 60fps). No library needed.
+let flyTarget = null;  // {toPos: Vector3, toTarget: Vector3, frames: number, total: number}
+
+function flyToAgent(agentPos) {
+    // Destination: camera stays at same distance from Earth but shifts toward agent
+    const dist    = camera.position.length();
+    const dir     = agentPos.clone().normalize();
+    const toPos   = dir.multiplyScalar(dist * 0.95);  // slightly closer
+    flyTarget = { toPos, toTarget: agentPos.clone(), frames: 0, total: 60 };
+}
+
+// Called from animate() each frame
+function tickFly() {
+    if (!flyTarget) return;
+    flyTarget.frames++;
+    const t = Math.min(flyTarget.frames / flyTarget.total, 1.0);
+    const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;   // smooth quadratic ease in-out
+    camera.position.lerp(flyTarget.toPos, ease * 0.06);
+    controls.target.lerp(flyTarget.toTarget, ease * 0.06);
+    controls.update();
+    if (flyTarget.frames >= flyTarget.total) flyTarget = null;
+}
+
 // ─── Orbital arc visualization ────────────────────────────────────────────────
 // One arc line per agent, shown when that agent is clicked.
 const arcLines = [];   // THREE.Line objects, one per possible agent
@@ -808,21 +831,52 @@ const ARC_MATERIAL = new THREE.LineBasicMaterial({
     color: 0x00ffaa, transparent: true, opacity: 0.35, depthWrite: false
 });
 
+// Two-body Keplerian RK4 step — same physics as server conjunction/engine.py
+// μ = 398600.4418 km³/s²  (Earth gravitational parameter, WGS84)
+const MU_KM3S2 = 398600.4418;
+
+function keplerRK4(rx, ry, rz, vx, vy, vz, dt) {
+    function accel(x, y, z) {
+        const r3 = Math.pow(x*x + y*y + z*z, 1.5);
+        return [-MU_KM3S2 * x / r3, -MU_KM3S2 * y / r3, -MU_KM3S2 * z / r3];
+    }
+    // k1
+    const a1 = accel(rx, ry, rz);
+    // k2
+    const r2x = rx + vx*dt/2, r2y = ry + vy*dt/2, r2z = rz + vz*dt/2;
+    const v2x = vx + a1[0]*dt/2, v2y = vy + a1[1]*dt/2, v2z = vz + a1[2]*dt/2;
+    const a2 = accel(r2x, r2y, r2z);
+    // k3
+    const r3x = rx + v2x*dt/2, r3y = ry + v2y*dt/2, r3z = rz + v2z*dt/2;
+    const v3x = vx + a2[0]*dt/2, v3y = vy + a2[1]*dt/2, v3z = vz + a2[2]*dt/2;
+    const a3 = accel(r3x, r3y, r3z);
+    // k4
+    const r4x = rx + v3x*dt, r4y = ry + v3y*dt, r4z = rz + v3z*dt;
+    const v4x = vx + a3[0]*dt, v4y = vy + a3[1]*dt, v4z = vz + a3[2]*dt;
+    const a4 = accel(r4x, r4y, r4z);
+    return [
+        rx + dt/6 * (vx + 2*v2x + 2*v3x + v4x),
+        ry + dt/6 * (vy + 2*v2y + 2*v3y + v4y),
+        rz + dt/6 * (vz + 2*v2z + 2*v3z + v4z),
+        vx + dt/6 * (a1[0] + 2*a2[0] + 2*a3[0] + a4[0]),
+        vy + dt/6 * (a1[1] + 2*a2[1] + 2*a3[1] + a4[1]),
+        vz + dt/6 * (a1[2] + 2*a2[2] + 2*a3[2] + a4[2]),
+    ];
+}
+
 function buildArc(agent) {
-    // Trace 90 × 60s Keplerian steps from agent's current position using
-    // linear extrapolation. Good enough for display at orbital scale.
-    // Phase 4: replace with proper Keplerian propagator call.
+    // Trace one full 90-min LEO pass using RK4 two-body integration (60s steps).
+    // Produces a proper Keplerian ellipse — same physics as server propagator.
     const scale = 1 / 1000;
     const pts   = [];
-    let x = agent.x, y = agent.y, z = agent.z;
-    const vel = agentVelocities[agent.norad_id] || { vx: 0, vy: 0, vz: 0 };
-    const dt  = 60; // seconds per step
+    const vel   = agentVelocities[agent.norad_id] || { vx: 0, vy: 0, vz: 0 };
+    let rx = agent.x, ry = agent.y, rz = agent.z;
+    let vx = vel.vx,  vy = vel.vy,  vz = vel.vz;
+
     for (let s = 0; s <= 90; s++) {
-        pts.push(new THREE.Vector3(
-            (x + vel.vx * s * dt) * scale,
-            (y + vel.vy * s * dt) * scale,
-            (z + vel.vz * s * dt) * scale,
-        ));
+        pts.push(new THREE.Vector3(rx * scale, ry * scale, rz * scale));
+        const next = keplerRK4(rx, ry, rz, vx, vy, vz, 60);
+        [rx, ry, rz, vx, vy, vz] = next;
     }
     return new THREE.BufferGeometry().setFromPoints(pts);
 }
@@ -865,9 +919,10 @@ renderer.domElement.addEventListener("click", (e) => {
     if (agentHits.length > 0) {
         const agent = agentHits[0].object.userData;
         if (agent && agent.norad_id) {
-            // Find index into meshAgents for arc drawing
+            // Find index into meshAgents for arc drawing + fly-to
             const idx = meshAgents.findIndex(a => a.norad_id === agent.norad_id);
             showArc(idx);
+            if (idx >= 0 && agentRings[idx]) flyToAgent(agentRings[idx].position.clone());
 
             document.getElementById("inspector-name").innerText  = agent.name;
             document.getElementById("inspector-norad").innerText = agent.norad_id;
@@ -977,6 +1032,7 @@ function animate() {
         });
     }
 
+    tickFly();
     renderer.render(scene, camera);
 }
 
