@@ -153,6 +153,17 @@
         cursor: pointer; font-family: inherit;
     }
     .locate-btn:hover { background: rgba(0,255,170,0.18); }
+
+    /* Training feed milestone badges */
+    .tm-badge {
+        flex:1; text-align:center; padding:2px 0; font-size:8px;
+        border-radius:2px; border:1px solid rgba(255,170,0,0.2);
+        color:rgba(255,170,0,0.35); cursor:default;
+    }
+    .tm-badge.reached {
+        background:rgba(255,170,0,0.15); color:#ffaa00;
+        border-color:rgba(255,170,0,0.5);
+    }
     </style>
 </head>
 <body>
@@ -252,6 +263,26 @@
 
     <!-- Agent cards -->
     <div id="agent-cards"></div>
+
+    <!-- Training feed divider — shown only in training mode -->
+    <div id="training-panel" style="display:none; margin-top:10px; border-top:1px solid rgba(255,255,255,0.08); padding-top:8px;">
+        <div class="section-title" style="color:#ffaa00;">TRAINING FEED</div>
+        <div id="training-run-id" style="font-size:8px;color:rgba(255,255,255,0.4);margin-bottom:6px;"></div>
+        <div id="training-milestone-row" style="display:flex;gap:4px;margin-bottom:6px;">
+            <div id="tm1" class="tm-badge" data-m="1">M1</div>
+            <div id="tm2" class="tm-badge" data-m="2">M2</div>
+            <div id="tm3" class="tm-badge" data-m="3">M3</div>
+            <div id="tm4" class="tm-badge" data-m="4">M4</div>
+        </div>
+        <div id="training-stats" style="font-size:9px;color:rgba(255,255,255,0.5);line-height:1.7;"></div>
+    </div>
+
+    <!-- TRAINING FEED button -->
+    <button id="training-feed-btn" style="margin-top:8px;width:100%;padding:5px 0;font-size:9px;
+        letter-spacing:0.08em;background:rgba(255,170,0,0.08);color:#ffaa00;
+        border:1px solid rgba(255,170,0,0.25);border-radius:2px;cursor:pointer;font-family:inherit;">
+        TRAINING FEED
+    </button>
 </div>
 
 <script type="module">
@@ -1070,6 +1101,70 @@ window.addEventListener("resize", () => {
 });
 
 animate();
+
+// ─── Training feed ────────────────────────────────────────────────────────────
+// Connects to the relay WebSocket and renders live training state on the globe.
+// The relay receives pushes from the Modal training container every ~50 episodes.
+let trainingWS = null;
+
+function applyTrainingState(data) {
+    if (!data || data.type === "ping") return;
+
+    // Show the training panel
+    document.getElementById("training-panel").style.display = "block";
+
+    // Update run ID and elapsed
+    const runLabel = `${data.run_id || "--"}  ep ${data.episode || 0}  ${(data.elapsed_min || 0).toFixed(1)}min`;
+    document.getElementById("training-run-id").textContent = runLabel;
+
+    // Update milestone badges
+    const reached = new Set(data.milestones_reached || []);
+    [1,2,3,4].forEach(m => {
+        const el = document.getElementById(`tm${m}`);
+        el.classList.toggle("reached", reached.has(m));
+        const ep = (data.milestone_episodes || {})[m];
+        el.title = reached.has(m) ? `M${m} reached ep${ep}` : `M${m} not yet`;
+    });
+
+    // Update stats text
+    const r = data.reward || {};
+    const rt = data.rates  || {};
+    document.getElementById("training-stats").textContent =
+        `reward ${(r.mean||0) >= 0 ? "+" : ""}${(r.mean||0).toFixed(3)}` +
+        `  [S${(r.survival||0)>=0?"+":""}${(r.survival||0).toFixed(2)} M${(r.mission||0)>=0?"+":""}${(r.mission||0).toFixed(2)}]` +
+        `\neclipse ${(rt.eclipse_idle||0).toFixed(2)}  africa ${(rt.africa_img||0).toFixed(2)}` +
+        `  dl ${(rt.contact_dl||0).toFixed(2)}  yield ${(rt.yield||0).toFixed(3)}`;
+
+    // Render agents on globe using the same updateAgentMeshes() function
+    if (data.agents && data.agents.length > 0 && data.sim_epoch_utc) {
+        // Convert training agent snapshots to the format applyMeshState expects
+        // Agents in training snapshots have position proxied via altitude only --
+        // we render them in their last known ECI position if available, or skip.
+        // Full ECI positions come in Run 2 once we confirm the relay is working.
+        simEpochMs     = new Date(data.sim_epoch_utc).getTime();
+        simEpochRealMs = Date.now();
+    }
+}
+
+document.getElementById("training-feed-btn").addEventListener("click", () => {
+    const btn = document.getElementById("training-feed-btn");
+    if (trainingWS) {
+        trainingWS.close(); trainingWS = null;
+        btn.innerText = "TRAINING FEED";
+        document.getElementById("training-panel").style.display = "none";
+        return;
+    }
+    btn.innerText = "CONNECTING…";
+    const ws = new WebSocket(`${WS_BASE}/training/feed`);
+    trainingWS = ws;
+
+    ws.onopen  = () => { btn.innerText = "TRAINING LIVE (click to stop)"; };
+    ws.onmessage = (e) => { try { applyTrainingState(JSON.parse(e.data)); } catch(_) {} };
+    ws.onerror = () => { btn.innerText = "TRAINING FEED (error)"; };
+    ws.onclose = () => {
+        if (trainingWS === ws) { trainingWS = null; btn.innerText = "TRAINING FEED"; }
+    };
+});
 
 </script>
 </body>
