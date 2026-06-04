@@ -1135,14 +1135,12 @@ function applyTrainingState(data) {
         `\neclipse ${(rt.eclipse_idle||0).toFixed(2)}  africa ${(rt.africa_img||0).toFixed(2)}` +
         `  dl ${(rt.contact_dl||0).toFixed(2)}  yield ${(rt.yield||0).toFixed(3)}`;
 
-    // Render agents on globe using the same updateAgentMeshes() function
-    if (data.agents && data.agents.length > 0 && data.sim_epoch_utc) {
-        // Convert training agent snapshots to the format applyMeshState expects
-        // Agents in training snapshots have position proxied via altitude only --
-        // we render them in their last known ECI position if available, or skip.
-        // Full ECI positions come in Run 2 once we confirm the relay is working.
-        simEpochMs     = new Date(data.sim_epoch_utc).getTime();
-        simEpochRealMs = Date.now();
+    // Agents have full ECI state (x,y,z,vx,vy,vz) -- pass directly to
+    // applyMeshState() which already knows how to render them on the globe.
+    if (data.agents && data.agents.length > 0) {
+        // Activate the mesh session so the globe renders agents
+        meshActive = true;
+        applyMeshState(data);
     }
 }
 
