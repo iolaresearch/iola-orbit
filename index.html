@@ -1061,31 +1061,37 @@ function animate() {
         sun.position.set(scene_x, scene_y, scene_z);
     })();
 
-    // Per-frame agent update: Keplerian extrapolation + ring billboard + label follow
-    if (meshActive && simEpochMs !== null) {
-        const realElapsedS = (Date.now() - simEpochRealMs) / 1000;
-        const mult = TIME_MULTIPLIERS[timeMode] ?? 1;
-        const simElapsedS  = realElapsedS * mult;
+    // Per-frame agent update: Keplerian extrapolation + ring billboard + label follow.
+    // Billboard runs unconditionally whenever agents exist — rings must always face
+    // the camera regardless of whether simEpochMs is available (training feed sends
+    // no sim_epoch_utc in old schema, but agents are still visible).
+    if (meshActive && meshAgents.length > 0) {
         const scale = 1 / 1000;
+        // Extrapolate positions only when we have a valid simulation clock
+        const simElapsedS = (meshActive && simEpochMs !== null)
+            ? (Date.now() - simEpochRealMs) / 1000 * (TIME_MULTIPLIERS[timeMode] ?? 1)
+            : 0;  // No clock: render at last-known position, no extrapolation
 
         meshAgents.forEach((a, i) => {
             if (!agentDots[i] || !agentDots[i].visible) return;
             const vel = agentVelocities[a.norad_id];
-            if (!vel) return;
+            const dvx = vel ? vel.vx : 0;
+            const dvy = vel ? vel.vy : 0;
+            const dvz = vel ? vel.vz : 0;
 
-            const px = (a.x + vel.vx * simElapsedS) * scale;
-            const py = (a.y + vel.vy * simElapsedS) * scale;
-            const pz = (a.z + vel.vz * simElapsedS) * scale;
+            const px = (a.x + dvx * simElapsedS) * scale;
+            const py = (a.y + dvy * simElapsedS) * scale;
+            const pz = (a.z + dvz * simElapsedS) * scale;
 
             // Move dot
             agentDots[i].geometry.attributes.position.setXYZ(0, px, py, pz);
             agentDots[i].geometry.attributes.position.needsUpdate = true;
 
-            // Move ring + billboard to camera
+            // Ring: move to position AND billboard to camera every frame
             agentRings[i].position.set(px, py, pz);
             agentRings[i].quaternion.copy(camera.quaternion);
 
-            // Move label above dot
+            // Label: float above dot
             agentLabels[i].position.set(px, py + 0.28, pz);
         });
     }
