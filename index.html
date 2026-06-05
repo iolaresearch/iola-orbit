@@ -1135,10 +1135,30 @@ function applyTrainingState(data) {
         `\neclipse ${(rt.eclipse_idle||0).toFixed(2)}  africa ${(rt.africa_img||0).toFixed(2)}` +
         `  dl ${(rt.contact_dl||0).toFixed(2)}  yield ${(rt.yield||0).toFixed(3)}`;
 
-    // Agents have full ECI state (x,y,z,vx,vy,vz) -- pass directly to
-    // applyMeshState() which already knows how to render them on the globe.
+    // Normalise agent fields -- handle both old schema (id/battery/storage)
+    // and new schema (norad_id/battery_pct/storage_pct). Modal containers
+    // may be running old code; the frontend must accept both.
     if (data.agents && data.agents.length > 0) {
-        // Activate the mesh session so the globe renders agents
+        data.agents = data.agents.map((a, i) => ({
+            norad_id:                 a.norad_id  || a.id  || `IOLA-${i+1}`,
+            name:                     a.name      || a.id  || `IOLA-SAT-${i+1}`,
+            // If no ECI position: place on equatorial orbit at the correct altitude
+            // spaced 120 degrees apart so all three are visible simultaneously.
+            x:  a.x  != null ? a.x  : (6371 + (a.altitude_km||500)) * Math.cos(i * 2.094),
+            y:  a.y  != null ? a.y  : (6371 + (a.altitude_km||500)) * Math.sin(i * 2.094),
+            z:  a.z  != null ? a.z  : 0,
+            vx: a.vx || 0, vy: a.vy || 0, vz: a.vz || 0,
+            altitude_km:              a.altitude_km || 500,
+            mode:                     a.mode || "IDLE",
+            battery_pct:              a.battery_pct  ?? a.battery  ?? 80,
+            storage_pct:              a.storage_pct  ?? a.storage  ?? 0,
+            sunlit:                   a.sunlit ?? true,
+            in_contact_window:        a.in_contact_window ?? false,
+            contact_window_remaining: a.contact_window_remaining ?? 0,
+            episode_reward:           a.episode_reward ?? 0,
+            over_africa:              a.over_africa ?? null,
+            reward_breakdown:         a.reward_breakdown || {survival:0,mission:0,optionality:0,externality:0},
+        }));
         meshActive = true;
         applyMeshState(data);
     }
