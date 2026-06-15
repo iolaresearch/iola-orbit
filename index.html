@@ -288,32 +288,38 @@
     <div class="algo-badge" id="prop-badge">
         <span class="algo-dot"></span>
         IOLA PROPAGATION LIVE
-        <span class="algo-info" title="SGP4/SDP4 orbital mechanics propagated by IOLA's validated engine. 15,000+ objects updated in real time from CelesTrak TLE catalog. Accuracy: 1–3 km for fresh TLEs.">ⓘ</span>
+        <span class="algo-info" title="Real-time orbital propagation using live orbital element data. Continuously calculates spacecraft positions and future trajectories across the active catalog.">ⓘ</span>
+    </div>
+
+    <!-- Catalog count — attached to propagation -->
+    <div class="top-stat">
+        <span class="lbl">CATALOG</span>
+        <span class="val" id="top-catalog-size">—</span>
     </div>
 
     <!-- IOLA Conjunction badge -->
     <div class="algo-badge" id="conj-badge">
         <span class="algo-dot" style="background:#ff8c00"></span>
         IOLA CONJUNCTION LIVE
-        <span class="algo-info" title="IOLA's conjunction screening pipeline: three-stage SGP4 scan with bstar-weighted TLE age uncertainty (σ = σ₀ + k·|B*|/B*₀·age²) and orbital shell congestion weighting. Novel IP — no published CDM standard includes these components.">ⓘ</span>
+        <span class="algo-info" title="Continuously evaluates close approaches between orbital objects and identifies potential conjunction events across the active catalog.">ⓘ</span>
     </div>
 
+    <!-- Conjunction count — attached to conjunction -->
     <div class="top-stat">
+        <span class="val" id="top-conj-count" style="color:rgba(255,255,255,0.6)">—</span>
+        <span class="lbl">EVENTS</span>
+    </div>
+    <div class="top-stat">
+        <span class="val" id="top-critical-count" style="color:#ff3a3a;font-weight:700">0</span>
+        <span class="lbl" style="color:rgba(255,58,58,0.6)">CRITICAL</span>
+    </div>
+
+    <!-- Live data freshness -->
+    <div class="top-stat" style="margin-left:auto;">
         <div id="freshness-dot"></div>
-        <span class="lbl">EPOCH</span>
-        <span class="val" id="tle-age-display">—</span>
-    </div>
-    <div class="top-stat">
-        <span class="lbl">CATALOG</span>
-        <span class="val" id="top-catalog-size">—</span>
-    </div>
-    <div class="top-stat">
-        <span class="lbl">CONJUNCTIONS</span>
-        <span class="val" id="top-conj-count">—</span>
-    </div>
-    <div class="top-stat">
-        <span class="lbl" id="critical-lbl" style="color:rgba(255,255,255,0.3)">CRITICAL</span>
-        <span class="val" id="top-critical-count" style="color:#ff3a3a">0</span>
+        <span class="lbl">LIVE DATA</span>
+        <span class="val" id="tle-age-display"
+              title="Orbital positions are generated from current orbital element data and continuously propagated forward in time.">—</span>
     </div>
     <span id="utc-clock">—</span>
 </div>
