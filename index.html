@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <link rel="stylesheet" href="./styles.css">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23000000'/%3E%3Cimage href='./iola-logo-space.png' x='4' y='4' width='24' height='24' clip-path='url(%23c)'/%3E%3CclipPath id='c'%3E%3Ccircle cx='16' cy='16' r='12'/%3E%3C/clipPath%3E%3C/svg%3E">
-    <title>IOLA Orbit — Command Center</title>
+    <title>IOLA Orbit — Orbital Intelligence</title>
     <script type="importmap">
     {
     "imports": {
@@ -15,293 +15,401 @@
     }
     </script>
     <style>
-    /* IkirereMesh command center additions */
-    #mesh-panel {
-        position: absolute;
-        bottom: 24px;
-        right: 24px;
-        z-index: 100;
-        width: 280px;
-        background: rgba(0,0,0,0.72);
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 6px;
-        padding: 16px;
-        backdrop-filter: blur(16px);
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
+    /* ── Top bar ─────────────────────────────────────────────────────────────── */
+    #top-bar {
+        position: absolute; top: 0; left: 0; right: 0; z-index: 200;
+        height: 44px;
+        background: rgba(0,0,0,0.75);
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+        backdrop-filter: blur(12px);
+        display: flex; align-items: center;
+        padding: 0 20px; gap: 20px;
     }
-    #mesh-panel .section-title {
-        font-size: 9px;
-        letter-spacing: 0.22em;
-        color: rgba(255,255,255,0.3);
-        margin-bottom: 2px;
+    #top-bar .wordmark {
+        font-size: 11px; font-weight: 700; letter-spacing: 0.28em;
+        color: rgba(255,255,255,0.7); flex-shrink: 0;
     }
-    .spawn-row {
-        display: flex;
-        gap: 8px;
-        align-items: center;
+    .top-stat {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 10px; letter-spacing: 0.08em;
     }
-    .spawn-row label { font-size: 10px; color: rgba(255,255,255,0.4); white-space: nowrap; }
-    .spawn-row input[type=number] {
-        width: 48px; padding: 4px 6px;
-        background: rgba(255,255,255,0.06);
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 3px; color: #fff;
-        font-family: inherit; font-size: 11px; text-align: center;
+    .top-stat .lbl { color: rgba(255,255,255,0.3); }
+    .top-stat .val { color: #fff; font-weight: 600; }
+    #freshness-dot {
+        width: 6px; height: 6px; border-radius: 50%;
+        background: #00ff88; flex-shrink: 0;
     }
-    #spawn-btn {
-        flex: 1; padding: 7px 0;
-        background: rgba(0,255,136,0.08);
-        border: 1px solid rgba(0,255,136,0.35);
-        border-radius: 3px; color: #00ff88;
-        font-family: inherit; font-size: 9px;
-        letter-spacing: 0.1em; cursor: pointer;
-        transition: all 0.15s;
-    }
-    #spawn-btn:hover { background: rgba(0,255,136,0.18); }
-    #spawn-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    #freshness-dot.aging  { background: #ffcc00; }
+    #freshness-dot.stale  { background: #ff8c00; }
+    #freshness-dot.critical { background: #ff3a3a; animation: pulse-red 1s infinite; }
+    @keyframes pulse-red { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    #utc-clock { margin-left: auto; font-size: 10px; color: rgba(255,255,255,0.4); letter-spacing: 0.1em; }
 
-    /* Time mode toggle */
-    .time-modes {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
-        gap: 4px;
+    /* ── Left panel ──────────────────────────────────────────────────────────── */
+    #left-panel {
+        position: absolute; top: 54px; left: 16px; z-index: 100;
+        width: 196px;
+        display: flex; flex-direction: column; gap: 8px;
     }
-    .time-btn {
-        padding: 6px 2px;
-        background: transparent;
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 3px; color: rgba(255,255,255,0.35);
-        font-family: inherit; font-size: 8px;
-        letter-spacing: 0.05em; cursor: pointer;
-        text-align: center; transition: all 0.15s;
-        line-height: 1.3;
+    .panel {
+        background: rgba(0,0,0,0.68);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 4px; padding: 14px;
+        backdrop-filter: blur(12px);
     }
-    .time-btn.active {
-        border-color: rgba(0,187,255,0.6);
-        color: #00bbff;
-        background: rgba(0,187,255,0.07);
+    .panel-title {
+        font-size: 8px; letter-spacing: 0.22em;
+        color: rgba(255,255,255,0.25); margin-bottom: 10px;
     }
-    .time-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-    /* Agent cards */
-    #agent-cards { display: flex; flex-direction: column; gap: 6px; }
-    .agent-card {
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.07);
-        border-radius: 4px; padding: 10px;
-        border-left: 3px solid #ff3a6e;
-        font-size: 10px;
-    }
-    .agent-card-header {
+    .stat-row {
         display: flex; justify-content: space-between;
-        align-items: center; margin-bottom: 6px;
+        align-items: center; margin-bottom: 5px; font-size: 11px;
     }
-    .agent-name { font-size: 11px; font-weight: 600; color: #fff; }
-    .agent-mode {
-        font-size: 8px; letter-spacing: 0.1em;
-        padding: 2px 6px; border-radius: 2px;
-        background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.6);
+    .label { color: rgba(255,255,255,0.35); font-size: 9px; letter-spacing: 0.08em; }
+    .stat-row span:last-child { font-size: 12px; font-weight: 600; color: #fff; }
+    .leo { color: #00ff88 !important; }
+    .meo { color: #00bbff !important; }
+    .geo { color: #ff6600 !important; }
+    .divider { height: 1px; background: rgba(255,255,255,0.06); margin: 10px 0; }
+    .filters { display: flex; gap: 5px; }
+    .filter-btn {
+        flex: 1; padding: 5px 0;
+        border: 1px solid rgba(255,255,255,0.1); border-radius: 3px;
+        background: transparent; color: rgba(255,255,255,0.25);
+        font-family: inherit; font-size: 8px; letter-spacing: 0.08em;
+        cursor: pointer; transition: all 0.15s;
     }
-    .agent-mode.IDLE       { color: rgba(255,255,255,0.4); }
-    .agent-mode.IMAGING    { background: rgba(0,255,136,0.12); color: #00ff88; }
-    .agent-mode.DOWNLINK   { background: rgba(0,187,255,0.12); color: #00bbff; }
-    .agent-mode.YIELD_COVERAGE { background: rgba(255,165,0,0.12); color: orange; }
-    .agent-mode.SAFE_MODE  { background: rgba(255,100,100,0.12); color: #ff6464; }
-    .agent-bars { display: flex; flex-direction: column; gap: 3px; }
-    .bar-row { display: flex; align-items: center; gap: 6px; }
-    .bar-label { font-size: 8px; color: rgba(255,255,255,0.3); width: 50px; }
-    .bar-track {
-        flex: 1; height: 4px;
-        background: rgba(255,255,255,0.06);
-        border-radius: 2px; overflow: hidden;
-    }
-    .bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
-    .bar-fill.battery { background: #00ff88; }
-    .bar-fill.storage  { background: #00bbff; }
-    .bar-fill.reward   { background: #ff3a6e; }
-    .bar-val { font-size: 8px; color: rgba(255,255,255,0.5); width: 30px; text-align: right; }
+    .filter-btn.active.leo { border-color: #00ff88; color: #00ff88; }
+    .filter-btn.active.meo { border-color: #00bbff; color: #00bbff; }
+    .filter-btn.active.geo { border-color: #ff6600; color: #ff6600; }
 
-    .step-counter {
-        font-size: 9px; color: rgba(255,255,255,0.3);
-        text-align: center; letter-spacing: 0.1em;
+    /* ── Shell density bar ───────────────────────────────────────────────────── */
+    .density-bands { display: flex; flex-direction: column; gap: 2px; }
+    .density-band-row {
+        display: flex; align-items: center; gap: 5px; cursor: pointer;
+        padding: 1px 2px; border-radius: 2px; transition: background 0.1s;
     }
-    .step-counter span { color: rgba(255,255,255,0.7); }
+    .density-band-row:hover { background: rgba(255,255,255,0.05); }
+    .density-band-row.selected { background: rgba(255,255,255,0.08); }
+    .band-alt { font-size: 7px; color: rgba(255,255,255,0.3); width: 32px; text-align: right; flex-shrink: 0; }
+    .band-track { flex: 1; height: 5px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; }
+    .band-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+    .band-count { font-size: 7px; color: rgba(255,255,255,0.3); width: 28px; text-align: right; flex-shrink: 0; }
 
-    /* Extended inspector for IOLA agents */
-    .inspector-reward { margin-top: 8px; }
-    .reward-row { display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 3px; }
-    .reward-row .rl { color: rgba(255,255,255,0.3); }
-    .reward-row .rv { color: #fff; font-weight: 500; }
+    /* ── System status ───────────────────────────────────────────────────────── */
+    .sys-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .sys-lbl { font-size: 8px; color: rgba(255,255,255,0.3); letter-spacing: 0.06em; }
+    .sys-val { font-size: 8px; color: rgba(255,255,255,0.6); }
+    .sys-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+    .sys-ok { background: #00ff88; }
+    .sys-warn { background: #ffcc00; }
+    .sys-err { background: #ff3a3a; }
 
-    /* Ground station markers */
-    .gs-badge {
-        display: inline-block; font-size: 8px;
-        padding: 1px 5px; border-radius: 2px;
-        background: rgba(255,165,0,0.15);
-        border: 1px solid rgba(255,165,0,0.3);
-        color: orange; margin-right: 4px;
+    /* ── Right panel: inspector / conjunction feed ───────────────────────────── */
+    #right-panel {
+        position: absolute; top: 54px; right: 16px; z-index: 100;
+        width: 300px; max-height: calc(100vh - 80px);
+        overflow-y: auto; display: flex; flex-direction: column; gap: 0;
+    }
+    #right-panel::-webkit-scrollbar { width: 3px; }
+    #right-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+    /* conjunction feed */
+    #conj-feed { display: flex; flex-direction: column; }
+    .feed-header {
+        background: rgba(0,0,0,0.78); padding: 12px 14px 8px;
+        border: 1px solid rgba(255,255,255,0.08); border-radius: 4px 4px 0 0;
+        backdrop-filter: blur(12px);
+    }
+    .feed-title { font-size: 8px; letter-spacing: 0.2em; color: rgba(255,255,255,0.25); margin-bottom: 6px; }
+    .feed-summary { display: flex; gap: 8px; }
+    .tier-badge {
+        font-size: 8px; letter-spacing: 0.06em; padding: 2px 6px;
+        border-radius: 2px; font-weight: 700;
+    }
+    .tier-CRITICAL { background: rgba(255,58,58,0.15); color: #ff3a3a; border: 1px solid rgba(255,58,58,0.3); }
+    .tier-HIGH     { background: rgba(255,140,0,0.12); color: #ff8c00; border: 1px solid rgba(255,140,0,0.25); }
+    .tier-MODERATE { background: rgba(255,204,0,0.10); color: #ffcc00; border: 1px solid rgba(255,204,0,0.2); }
+    .tier-LOW      { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.3); border: 1px solid rgba(255,255,255,0.08); }
+    .feed-age { font-size: 7px; color: rgba(255,255,255,0.2); margin-top: 5px; }
+
+    .conj-event {
+        background: rgba(0,0,0,0.65); backdrop-filter: blur(12px);
+        border-left: 1px solid rgba(255,255,255,0.05);
+        border-right: 1px solid rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        padding: 10px 14px; cursor: pointer; transition: background 0.1s;
+    }
+    .conj-event:hover { background: rgba(255,255,255,0.04); }
+    .conj-event:last-child { border-radius: 0 0 4px 4px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .conj-event.selected { background: rgba(255,255,255,0.06); }
+    .conj-event-header { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+    .conj-tier-indicator {
+        width: 3px; height: 28px; border-radius: 2px; flex-shrink: 0;
+    }
+    .ind-CRITICAL { background: #ff3a3a; }
+    .ind-HIGH     { background: #ff8c00; }
+    .ind-MODERATE { background: #ffcc00; }
+    .ind-LOW      { background: rgba(255,255,255,0.2); }
+    .conj-names { flex: 1; }
+    .conj-name-a { font-size: 10px; color: #fff; font-weight: 600; }
+    .conj-name-b { font-size: 9px; color: rgba(255,255,255,0.5); }
+    .conj-miss { text-align: right; }
+    .conj-miss-val { font-size: 13px; font-weight: 700; }
+    .conj-miss-unit { font-size: 7px; color: rgba(255,255,255,0.3); }
+    .miss-CRITICAL { color: #ff3a3a; }
+    .miss-HIGH     { color: #ff8c00; }
+    .miss-MODERATE { color: #ffcc00; }
+    .miss-LOW      { color: rgba(255,255,255,0.4); }
+    .conj-meta { display: flex; gap: 10px; }
+    .conj-tca { font-size: 8px; color: rgba(255,255,255,0.4); }
+    .conj-flags { display: flex; gap: 3px; flex-wrap: wrap; }
+    .flag {
+        font-size: 7px; letter-spacing: 0.04em; padding: 1px 4px;
+        border-radius: 2px; border: 1px solid rgba(255,255,255,0.1);
+        color: rgba(255,255,255,0.3);
+    }
+    .flag-TCA_IMMINENT { border-color: rgba(255,58,58,0.4); color: #ff3a3a; }
+    .flag-TCA_SOON     { border-color: rgba(255,140,0,0.4); color: #ff8c00; }
+    .flag-STALE_TLE    { border-color: rgba(255,204,0,0.3); color: #ffcc00; }
+    .flag-CONGESTED_SHELL { border-color: rgba(255,100,0,0.3); color: #ff6400; }
+    .flag-FAST_ENCOUNTER  { border-color: rgba(0,187,255,0.3); color: #00bbff; }
+    .flag-CLOSING      { border-color: rgba(0,255,136,0.3); color: #00ff88; }
+    .flag-POST_TCA     { border-color: rgba(255,255,255,0.08); color: rgba(255,255,255,0.2); }
+
+    /* satellite inspector */
+    #sat-inspector {
+        background: rgba(0,0,0,0.78); backdrop-filter: blur(12px);
+        border: 1px solid rgba(255,255,255,0.08); border-radius: 4px;
+        padding: 14px; margin-bottom: 8px;
+    }
+    #sat-inspector.hidden { display: none; }
+    .insp-header { font-size: 8px; letter-spacing: 0.2em; color: rgba(255,255,255,0.25); margin-bottom: 8px; }
+    #insp-name { font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 2px; word-break: break-word; }
+    #insp-norad { font-size: 9px; color: rgba(255,255,255,0.3); margin-bottom: 10px; }
+    .insp-grid { display: grid; grid-template-columns: 100px 1fr; gap: 4px 8px; font-size: 10px; }
+    .insp-lbl { color: rgba(255,255,255,0.3); font-size: 9px; align-self: center; }
+    .insp-val { color: #fff; font-weight: 500; }
+    .insp-val.ok    { color: #00ff88; }
+    .insp-val.warn  { color: #ffcc00; }
+    .insp-val.stale { color: #ff8c00; }
+    .insp-val.critical { color: #ff3a3a; }
+    .insp-section-title { font-size: 7px; letter-spacing: 0.18em; color: rgba(255,255,255,0.2);
+                          margin: 8px 0 5px; grid-column: 1/-1; }
+
+    /* conjunction inspector */
+    #conj-inspector {
+        background: rgba(0,0,0,0.78); backdrop-filter: blur(12px);
+        border: 1px solid rgba(255,255,255,0.08); border-radius: 4px;
+        padding: 14px; margin-top: 8px;
+    }
+    #conj-inspector.hidden { display: none; }
+    #conj-back {
+        font-size: 8px; color: rgba(255,255,255,0.3); cursor: pointer;
+        letter-spacing: 0.08em; margin-bottom: 10px; display: inline-block;
+    }
+    #conj-back:hover { color: rgba(255,255,255,0.6); }
+    .risk-tier-banner {
+        padding: 6px 10px; border-radius: 3px; margin-bottom: 10px;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-align: center;
+    }
+    .banner-CRITICAL { background: rgba(255,58,58,0.15); color: #ff3a3a; border: 1px solid rgba(255,58,58,0.3); }
+    .banner-HIGH     { background: rgba(255,140,0,0.12); color: #ff8c00; border: 1px solid rgba(255,140,0,0.25); }
+    .banner-MODERATE { background: rgba(255,204,0,0.10); color: #ffcc00; border: 1px solid rgba(255,204,0,0.2); }
+    .banner-LOW      { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.4); }
+    .cdm-section { margin-top: 8px; }
+    .cdm-title { font-size: 7px; letter-spacing: 0.18em; color: rgba(255,255,255,0.2); margin-bottom: 6px; }
+    .cdm-grid { display: grid; grid-template-columns: 120px 1fr; gap: 4px 8px; font-size: 10px; }
+    .cdm-lbl { color: rgba(255,255,255,0.3); font-size: 9px; }
+    .cdm-val { color: #fff; font-weight: 500; }
+    .action-banner {
+        margin-top: 10px; padding: 8px 10px; border-radius: 3px;
+        border: 1px solid rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.04);
+    }
+    .action-label { font-size: 8px; color: rgba(255,255,255,0.3); letter-spacing: 0.1em; margin-bottom: 3px; }
+    .action-text  { font-size: 11px; font-weight: 700; }
+    .action-MANEUVER_IMMEDIATE { color: #ff3a3a; }
+    .action-MANEUVER_RECOMMENDED { color: #ff8c00; }
+    .action-MONITOR_CLOSELY { color: #ffcc00; }
+    .action-MONITOR { color: rgba(255,255,255,0.4); }
+
+    /* watermark */
+    #watermark {
+        position: absolute; bottom: 16px; left: 16px;
+        height: 30px; opacity: 0.35; z-index: 100; pointer-events: none;
     }
 
-    /* Locate button in agent card */
-    .locate-btn {
-        margin-top: 6px; width: 100%;
-        padding: 3px 0; font-size: 9px; letter-spacing: 0.08em;
-        background: rgba(0,255,170,0.08); color: #00ffaa;
-        border: 1px solid rgba(0,255,170,0.25); border-radius: 2px;
-        cursor: pointer; font-family: inherit;
+    /* pause button */
+    #pause-btn {
+        position: absolute; bottom: 16px; right: 16px; z-index: 100;
+        padding: 6px 14px; background: transparent;
+        border: 1px solid rgba(255,255,255,0.1); border-radius: 3px;
+        color: rgba(255,255,255,0.35); font-family: inherit;
+        font-size: 8px; letter-spacing: 0.12em; cursor: pointer;
     }
-    .locate-btn:hover { background: rgba(0,255,170,0.18); }
+    #pause-btn:hover { border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.7); }
 
-    /* Training feed milestone badges */
-    .tm-badge {
-        flex:1; text-align:center; padding:2px 0; font-size:8px;
-        border-radius:2px; border:1px solid rgba(255,170,0,0.2);
-        color:rgba(255,170,0,0.35); cursor:default;
-    }
-    .tm-badge.reached {
-        background:rgba(255,170,0,0.15); color:#ffaa00;
-        border-color:rgba(255,170,0,0.5);
-    }
+    /* conjunction arcs */
+    .conj-arc-CRITICAL { /* color set in JS: 0xff3a3a */ }
+    .conj-arc-HIGH     { /* color set in JS: 0xff8c00 */ }
     </style>
 </head>
 <body>
 
-<img id="watermark" src="./iola-logo-space.png" alt="IOLA">
-
-<!-- Left panel: catalog stats -->
-<div id="ui">
+<!-- ── Top bar ─────────────────────────────────────────────────────────────── -->
+<div id="top-bar">
     <div class="wordmark">IOLA ORBIT</div>
+    <div class="top-stat">
+        <div id="freshness-dot"></div>
+        <span class="lbl">TLE</span>
+        <span class="val" id="tle-age-display">—</span>
+    </div>
+    <div class="top-stat">
+        <span class="lbl">CATALOG</span>
+        <span class="val" id="top-catalog-size">—</span>
+    </div>
+    <div class="top-stat">
+        <span class="lbl">CONJUNCTIONS</span>
+        <span class="val" id="top-conj-count">—</span>
+    </div>
+    <div class="top-stat">
+        <span class="lbl" id="critical-lbl" style="color:rgba(255,255,255,0.3)">CRITICAL</span>
+        <span class="val" id="top-critical-count" style="color:#ff3a3a">0</span>
+    </div>
+    <span id="utc-clock">—</span>
+</div>
+
+<!-- ── Left panel ─────────────────────────────────────────────────────────── -->
+<div id="left-panel">
+
+    <!-- Catalog stats -->
     <div class="panel">
-        <div class="stat-row">
-            <span class="label">TOTAL</span>
-            <span id="satellite-count">—</span>
-        </div>
-        <div class="stat-row">
-            <span class="label leo">LEO</span>
-            <span id="leo-count" class="leo">—</span>
-        </div>
-        <div class="stat-row">
-            <span class="label meo">MEO</span>
-            <span id="meo-count" class="meo">—</span>
-        </div>
-        <div class="stat-row">
-            <span class="label geo">GEO</span>
-            <span id="geo-count" class="geo">—</span>
-        </div>
+        <div class="panel-title">CATALOG</div>
+        <div class="stat-row"><span class="label">TOTAL</span><span id="satellite-count">—</span></div>
+        <div class="stat-row"><span class="label leo">LEO</span><span id="leo-count" class="leo">—</span></div>
+        <div class="stat-row"><span class="label meo">MEO</span><span id="meo-count" class="meo">—</span></div>
+        <div class="stat-row"><span class="label geo">GEO</span><span id="geo-count" class="geo">—</span></div>
         <div class="divider"></div>
         <div class="filters">
             <button class="filter-btn leo active" data-class="0">LEO</button>
             <button class="filter-btn meo active" data-class="1">MEO</button>
             <button class="filter-btn geo active" data-class="2">GEO</button>
         </div>
-        <div class="divider"></div>
-        <button id="pause-btn">PAUSE</button>
     </div>
-</div>
 
-<!-- Right panel: inspector (background satellite or IOLA agent) -->
-<div id="inspector" class="hidden">
-    <div class="inspector-header">OBJECT</div>
-    <div id="inspector-name"></div>
-    <div class="divider"></div>
-    <div class="inspector-grid">
-        <span class="label">NORAD</span><span id="inspector-norad"></span>
-        <span class="label">CLASS</span><span id="inspector-class"></span>
-        <span class="label">ALT</span><span id="inspector-alt"></span>
-    </div>
-    <!-- Extended fields for IOLA agents -->
-    <div id="inspector-agent-section" style="display:none;">
-        <div class="divider"></div>
-        <div class="inspector-grid">
-            <span class="label">MODE</span><span id="inspector-mode"></span>
-            <span class="label">BATTERY</span><span id="inspector-battery"></span>
-            <span class="label">STORAGE</span><span id="inspector-storage"></span>
-            <span class="label">SUNLIT</span><span id="inspector-sunlit"></span>
-            <span class="label">WINDOW</span><span id="inspector-window"></span>
-        </div>
-        <div class="inspector-reward">
-            <div class="divider"></div>
-            <div class="inspector-header">REWARD BREAKDOWN</div>
-            <div class="reward-row"><span class="rl">SURVIVAL</span><span class="rv" id="rw-survival"></span></div>
-            <div class="reward-row"><span class="rl">MISSION</span><span class="rv" id="rw-mission"></span></div>
-            <div class="reward-row"><span class="rl">OPTIONALITY</span><span class="rv" id="rw-opt"></span></div>
-            <div class="reward-row"><span class="rl">EXTERNALITY</span><span class="rv" id="rw-ext"></span></div>
+    <!-- Shell density monitor -->
+    <div class="panel">
+        <div class="panel-title">ORBITAL CONGESTION</div>
+        <div class="density-bands" id="density-bands">
+            <div style="font-size:8px;color:rgba(255,255,255,0.2);text-align:center;padding:8px 0;">Loading…</div>
         </div>
     </div>
-</div>
 
-<!-- Bottom-right: IkirereMesh command center -->
-<div id="mesh-panel">
-    <div class="section-title">IKIRERE MESH — COMMAND CENTER</div>
-
-    <!-- Spawn controls -->
-    <div class="spawn-row">
-        <label>AGENTS</label>
-        <input type="number" id="fleet-size" value="3" min="1" max="10">
-        <button id="spawn-btn">SPAWN FLEET</button>
-    </div>
-
-    <!-- Time mode -->
-    <div class="section-title" style="margin-top:4px;">OBSERVATION MODE</div>
-    <div class="time-modes">
-        <button class="time-btn active" data-mode="realtime">
-            LIVE<br><span style="font-size:7px;opacity:0.6">real time</span>
-        </button>
-        <button class="time-btn" data-mode="compressed">
-            PASS<br><span style="font-size:7px;opacity:0.6">90 min → 90 sec</span>
-        </button>
-    </div>
-    <!-- STEP mode button hidden — manual stepping reserved for training visualiser -->
-    <button id="step-btn" style="display:none;"></button>
-
-    <!-- Step counter -->
-    <div class="step-counter" id="step-display" style="display:none;">
-        STEP <span id="step-num">0</span> / 90 &nbsp;·&nbsp; EP <span id="ep-id">—</span>
-    </div>
-
-    <!-- Agent cards -->
-    <div id="agent-cards"></div>
-
-    <!-- Training feed divider — shown only in training mode -->
-    <div id="training-panel" style="display:none; margin-top:10px; border-top:1px solid rgba(255,255,255,0.08); padding-top:8px;">
-        <div class="section-title" style="color:#ffaa00;">TRAINING FEED</div>
-        <div id="training-run-id" style="font-size:8px;color:rgba(255,255,255,0.4);margin-bottom:6px;"></div>
-        <div id="training-milestone-row" style="display:flex;gap:4px;margin-bottom:6px;">
-            <div id="tm1" class="tm-badge" data-m="1">M1</div>
-            <div id="tm2" class="tm-badge" data-m="2">M2</div>
-            <div id="tm3" class="tm-badge" data-m="3">M3</div>
-            <div id="tm4" class="tm-badge" data-m="4">M4</div>
+    <!-- System status -->
+    <div class="panel">
+        <div class="panel-title">SYSTEM STATUS</div>
+        <div class="sys-row">
+            <span class="sys-lbl">COLLECTION</span>
+            <div style="display:flex;align-items:center;gap:5px;">
+                <div class="sys-dot sys-ok" id="sys-collection-dot"></div>
+                <span class="sys-val" id="sys-collection-val">—</span>
+            </div>
         </div>
-        <div id="training-stats" style="font-size:9px;color:rgba(255,255,255,0.5);line-height:1.7;"></div>
+        <div class="sys-row">
+            <span class="sys-lbl">FRESHNESS</span>
+            <div style="display:flex;align-items:center;gap:5px;">
+                <div class="sys-dot sys-ok" id="sys-freshness-dot"></div>
+                <span class="sys-val" id="sys-freshness-val">—</span>
+            </div>
+        </div>
+        <div class="sys-row">
+            <span class="sys-lbl">SGP4 ERRORS</span>
+            <span class="sys-val" id="sys-errors-val">—</span>
+        </div>
     </div>
 
-    <!-- TRAINING FEED button -->
-    <button id="training-feed-btn" style="margin-top:8px;width:100%;padding:5px 0;font-size:9px;
-        letter-spacing:0.08em;background:rgba(255,170,0,0.08);color:#ffaa00;
-        border:1px solid rgba(255,170,0,0.25);border-radius:2px;cursor:pointer;font-family:inherit;">
-        TRAINING FEED
-    </button>
 </div>
+
+<!-- ── Right panel ────────────────────────────────────────────────────────── -->
+<div id="right-panel">
+
+    <!-- Satellite inspector (shown when satellite clicked) -->
+    <div id="sat-inspector" class="hidden">
+        <div class="insp-header">OBJECT INSPECTOR</div>
+        <div id="insp-name">—</div>
+        <div id="insp-norad">NORAD —</div>
+        <div class="insp-grid" id="insp-grid"></div>
+    </div>
+
+    <!-- Conjunction feed (default) -->
+    <div id="conj-feed">
+        <div class="feed-header">
+            <div class="feed-title">CONJUNCTION INTELLIGENCE</div>
+            <div class="feed-summary" id="feed-summary">
+                <span class="tier-badge tier-CRITICAL">— CRITICAL</span>
+                <span class="tier-badge tier-HIGH">— HIGH</span>
+                <span class="tier-badge tier-MODERATE">— MOD</span>
+            </div>
+            <div class="feed-age" id="feed-age">Loading…</div>
+        </div>
+        <div id="conj-list"></div>
+    </div>
+
+    <!-- Conjunction inspector (shown on event click) -->
+    <div id="conj-inspector" class="hidden">
+        <span id="conj-back">← BACK TO FEED</span>
+        <div id="conj-banner" class="risk-tier-banner banner-LOW">LOW</div>
+        <div class="cdm-section">
+            <div class="cdm-title">OBJECT 1</div>
+            <div class="cdm-grid" id="conj-obj1"></div>
+        </div>
+        <div class="cdm-section">
+            <div class="cdm-title">OBJECT 2</div>
+            <div class="cdm-grid" id="conj-obj2"></div>
+        </div>
+        <div class="cdm-section">
+            <div class="cdm-title">GEOMETRY</div>
+            <div class="cdm-grid" id="conj-geometry"></div>
+        </div>
+        <div class="cdm-section">
+            <div class="cdm-title">RISK COMPONENTS</div>
+            <div class="cdm-grid" id="conj-risk"></div>
+        </div>
+        <div class="action-banner" id="action-banner">
+            <div class="action-label">RECOMMENDED ACTION</div>
+            <div class="action-text" id="action-text">—</div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ── Globe controls ─────────────────────────────────────────────────────── -->
+<img id="watermark" src="./iola-logo-space.png" alt="IOLA">
+<button id="pause-btn">PAUSE</button>
 
 <script type="module">
 
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
 
-// ─── Configuration ───────────────────────────────────────────────────────────
+// ── Configuration ─────────────────────────────────────────────────────────────
 const API_BASE = window.location.hostname === "localhost"
     ? "http://localhost:8000"
     : "https://iola-orbit-server.onrender.com";
-const WS_BASE  = API_BASE.replace("https://", "wss://").replace("http://", "ws://");
 
 const CLASS_COLORS = [0x00ff88, 0x00bbff, 0xff6600];
 const CLASS_NAMES  = ["LEO", "MEO", "GEO"];
 const COUNT_IDS    = ["leo-count", "meo-count", "geo-count"];
-const AGENT_COLOR  = 0xff3a6e;   // Hot pink — unmistakable against LEO green
 
-// ─── Scene setup ─────────────────────────────────────────────────────────────
+const RISK_COLORS = {
+    CRITICAL: 0xff3a3a,
+    HIGH:     0xff8c00,
+    MODERATE: 0xffcc00,
+    LOW:      0x888888,
+};
+
+// ── Scene setup ───────────────────────────────────────────────────────────────
 const scene    = new THREE.Scene();
 const camera   = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.z = 20;
@@ -311,11 +419,9 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.autoRotateSpeed = 0.5;
+controls.autoRotateSpeed = 0.3;
 
-// Earth — Three.js SphereGeometry default has North at +y, which is the
-// standard browser/WebGL "up" convention. We keep this and spin around y
-// for GMST. Ground stations and the light use the same y-up convention.
+// Earth
 const textureLoader = new THREE.TextureLoader();
 const earth = new THREE.Mesh(
     new THREE.SphereGeometry(6.371, 64, 64),
@@ -328,7 +434,7 @@ scene.add(earth);
 
 const atmosphere = new THREE.Mesh(
     new THREE.SphereGeometry(6.5, 64, 64),
-    new THREE.MeshBasicMaterial({ color: 0x3399ff, transparent: true, opacity: 0.08, side: THREE.BackSide })
+    new THREE.MeshBasicMaterial({ color: 0x3399ff, transparent: true, opacity: 0.07, side: THREE.BackSide })
 );
 scene.add(atmosphere);
 
@@ -340,13 +446,14 @@ const sun = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.Mesh
 sun.position.set(150, 60, 90);
 scene.add(sun);
 
+// Stars
 const starPos = [];
 for (let i = 0; i < 1000; i++) starPos.push((Math.random()-0.5)*2000, (Math.random()-0.5)*2000, (Math.random()-0.5)*2000);
 const starsGeo = new THREE.BufferGeometry();
 starsGeo.setAttribute("position", new THREE.Float32BufferAttribute(starPos, 3));
 scene.add(new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.15 })));
 
-// Background satellite point clouds (per orbit class)
+// Satellite point clouds
 const classGeos = CLASS_COLORS.map(() => new THREE.BufferGeometry());
 const classPts  = classGeos.map((geo, i) => {
     const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: CLASS_COLORS[i], size: 0.05 }));
@@ -354,62 +461,38 @@ const classPts  = classGeos.map((geo, i) => {
     return pts;
 });
 
-// IOLA agent rendering — ring reticle + central dot + name label
-// Each agent has three scene objects kept in parallel arrays:
-//   agentDots[]   — THREE.Points (1 point), color-coded, size 0.10
-//   agentRings[]  — THREE.Mesh(RingGeometry), billboarded to camera
-//   agentLabels[] — THREE.Sprite with canvas texture (name + mode)
-// agentMeshes[] mirrors agentDots[] for raycaster compatibility
-const agentDots   = [];
-const agentRings  = [];
-const agentLabels = [];
-const agentMeshes = [];   // alias to agentDots for raycaster + arc code
+// Conjunction arc pool
+const conjArcLines = {};   // key: "norA_norB" → THREE.Line
+const ARC_MAT_CRITICAL = new THREE.LineBasicMaterial({ color: 0xff3a3a, transparent: true, opacity: 0.6, depthWrite: false });
+const ARC_MAT_HIGH     = new THREE.LineBasicMaterial({ color: 0xff8c00, transparent: true, opacity: 0.5, depthWrite: false });
 
-const RING_GEO = new THREE.RingGeometry(0.13, 0.17, 32);
-
-function makeLabel(text) {
-    const canvas  = document.createElement("canvas");
-    canvas.width  = 256; canvas.height = 48;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, 256, 48);
-    ctx.font      = "bold 20px monospace";
-    ctx.fillStyle = "rgba(0,255,170,0.9)";
-    ctx.textAlign = "center";
-    ctx.fillText(text, 128, 30);
-    const tex    = new THREE.CanvasTexture(canvas);
-    const mat    = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
-    const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(0.9, 0.18, 1);
-    return sprite;
-}
-
-// Ground station markers — parented to Earth so they rotate with it.
-// Three.js y-up convention: x = R·cos(lat)·cos(lon), y = R·sin(lat),
-// z = -R·cos(lat)·sin(lon). This places points correctly on the y-up globe.
+// Ground stations
 function addGroundStation(lat, lon) {
-    const phi = lat  * Math.PI / 180;
-    const lam = lon  * Math.PI / 180;
-    const R   = 6.371;
-    const x =  R * Math.cos(phi) * Math.cos(lam);
-    const y =  R * Math.sin(phi);
-    const z = -R * Math.cos(phi) * Math.sin(lam);
+    const phi = lat * Math.PI / 180, lam = lon * Math.PI / 180, R = 6.371;
     const dot = new THREE.Mesh(
         new THREE.SphereGeometry(0.07, 12, 12),
         new THREE.MeshBasicMaterial({ color: 0xffaa00 })
     );
-    dot.position.set(x, y, z);
-    earth.add(dot);   // child of Earth — rotates with it
+    dot.position.set(R*Math.cos(phi)*Math.cos(lam), R*Math.sin(phi), -R*Math.cos(phi)*Math.sin(lam));
+    earth.add(dot);
 }
-addGroundStation(5.6037,  -0.1870);   // Accra, Ghana
-addGroundStation(-1.9415,  30.0574);  // Kigali, Rwanda
+addGroundStation(5.6037, -0.1870);   // Accra
+addGroundStation(-1.9415, 30.0574);  // Kigali
 
-// ─── Catalog loading ──────────────────────────────────────────────────────────
-let satMeta = [];
-let totalCount = 0;
-let paused = false;
-let workerReady = false;
-let pendingPropagate = false;
+// ── State ─────────────────────────────────────────────────────────────────────
+let satMeta      = [];
+let totalCount   = 0;
+let paused       = false;
+let workerReady  = false;
+let pendingProp  = false;
+let simTimeMs    = Date.now();
+let lastRealMs   = Date.now();
 
+let conjEvents      = [];    // latest conjunction feed
+let selectedConjKey = null;  // "norA_norB" of selected event
+let selectedSatNor  = null;  // NORAD of selected satellite
+
+// ── Client-side SGP4 worker ───────────────────────────────────────────────────
 const worker = new Worker("./propagate.worker.js");
 
 worker.onmessage = (e) => {
@@ -417,32 +500,37 @@ worker.onmessage = (e) => {
         workerReady = true;
         totalCount  = e.data.count;
         document.getElementById("satellite-count").innerText = totalCount;
+        document.getElementById("top-catalog-size").innerText = totalCount.toLocaleString();
         if (!paused) worker.postMessage({ type: "propagate" });
         return;
     }
     if (e.data.type === "positions") {
         const { positions, altitudes, classes } = e.data;
-        pendingPropagate = false;
+        pendingProp = false;
         const classBufs  = [[], [], []];
         const classMetas = [[], [], []];
         const classCounts = [0, 0, 0];
         for (let i = 0; i < totalCount; i++) {
             const cls = classes[i];
             classBufs[cls].push(positions[i*3], positions[i*3+1], positions[i*3+2]);
-            classMetas[cls].push({ name: satMeta[i]?.name, norad_id: satMeta[i]?.norad_id, altitude: altitudes[i], classIdx: cls });
+            classMetas[cls].push({ name: satMeta[i]?.name, norad_id: satMeta[i]?.norad_id, altitude: altitudes[i], classIdx: cls, x: positions[i*3], y: positions[i*3+1], z: positions[i*3+2] });
             classCounts[cls]++;
         }
         for (let c = 0; c < 3; c++) {
             classGeos[c].setAttribute("position", new THREE.BufferAttribute(new Float32Array(classBufs[c]), 3));
             classGeos[c].attributes.position.needsUpdate = true;
-            COUNT_IDS.forEach((id, idx) => { if (idx === c) document.getElementById(id).innerText = classCounts[c]; });
+            document.getElementById(COUNT_IDS[c]).innerText = classCounts[c].toLocaleString();
         }
         classPts.forEach((_, c) => { classPts[c].userData.metas = classMetas[c]; });
+
+        // Update conjunction arcs with current positions
+        updateConjunctionArcs();
     }
 };
 
-const response = await fetch(`${API_BASE}/tles`);
-const raw = await response.text();
+// Load TLEs
+const tleResp = await fetch(`${API_BASE}/tles`);
+const raw = await tleResp.text();
 const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
 for (let i = 0; i < lines.length - 2; i += 3) {
     if (lines[i].startsWith("1 ") || lines[i].startsWith("2 ")) continue;
@@ -450,394 +538,545 @@ for (let i = 0; i < lines.length - 2; i += 3) {
 }
 worker.postMessage({ type: "init", raw });
 
-// ─── Simulation clock ─────────────────────────────────────────────────────────
-// Each time mode advances simulated time at a different rate:
-//   realtime:   1 real second   = 1 simulated second   (1× speed)
-//   compressed: 1 real second   = 60 simulated seconds (60× speed — 90min pass in 90s)
-//   step:       manual advance  = 60 simulated seconds per click
-const TIME_MULTIPLIERS = { realtime: 1, compressed: 60, step: 0 };
-let simTimeMs  = Date.now();   // simulated UTC in ms — starts at real now
-let lastRealMs = Date.now();
-
-// Propagate interval — fires every 250ms real time; advances simulated clock by multiplier
-const propagateLoop = setInterval(() => {
+// Propagation loop
+setInterval(() => {
     if (!workerReady || paused) return;
-    const nowReal = Date.now();
-    const elapsed = nowReal - lastRealMs;
-    lastRealMs = nowReal;
-
-    const mult = TIME_MULTIPLIERS[timeMode] ?? 1;
-    if (timeMode === "realtime") {
-        // Always use actual current time — zero drift, positions are always real
-        simTimeMs = Date.now();
-    } else {
-        simTimeMs += elapsed * mult;
-    }
-
-    if (!pendingPropagate) {
-        pendingPropagate = true;
+    const now = Date.now();
+    lastRealMs = now; simTimeMs = now;
+    if (!pendingProp) {
+        pendingProp = true;
         worker.postMessage({ type: "propagate", timestamp: simTimeMs });
     }
 }, 250);
 
-// ─── IkirereMesh state ────────────────────────────────────────────────────────
-let meshActive   = false;
-let meshAgents   = [];      // latest agent state from API
-let meshWS       = null;
-let timeMode     = "realtime";   // Default: LIVE real time
-let wsManualStep = null;   // resolve function for step-mode promise
-
-// sim_epoch_utc: the simulation's current UTC time (ISO string) from the server.
-// Used to drive Earth rotation so ECI positions map to correct geography.
-let simEpochMs   = null;   // ms since unix epoch of last received sim_epoch_utc
-let simEpochRealMs = null; // wall-clock ms when that epoch was received
-// Per-agent velocity for client-side extrapolation between server steps
-let agentVelocities = {};  // norad_id → {vx, vy, vz} in km/s
-
-// Convert ECI km → Three.js scene units (Earth radius = 6.371 scene units)
-function eciToScene(x, y, z) {
-    const scale = 1 / 1000;  // 1000 km = 1 scene unit
-    return new THREE.Vector3(x * scale, y * scale, z * scale);
-}
-
-// GMST from a Unix timestamp in ms.
-// θ = 280.46061837 + 360.98564736629 × (JD - 2451545.0)  [degrees]
-// JD = unixMs / 86400000 + 2440587.5
-function gmstFromMs(unixMs) {
-    const jd      = unixMs / 86400000 + 2440587.5;
-    const deg     = 280.46061837 + 360.98564736629 * (jd - 2451545.0);
-    return (deg % 360) * Math.PI / 180;
-}
-
-const MODE_COLORS = {
-    IMAGING:        0x00ff88,
-    DOWNLINK:       0x00bbff,
-    YIELD_COVERAGE: 0xffaa00,
-    SAFE_MODE:      0xff4444,
-    IDLE:           0xff3a6e,
-    MANEUVER_PREP:  0xffff00,
-    REQUEST_RELAY:  0xcc88ff,
-    HOLD_POSITION:  0xffffff,
-};
-
-function updateAgentMeshes(agents) {
-    // Grow pool — one dot + ring + label per agent
-    while (agentDots.length < agents.length) {
-        // Dot: single bright point, color-coded
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
-        const dot = new THREE.Points(geo, new THREE.PointsMaterial({
-            color: 0xff3a6e, size: 0.10, sizeAttenuation: true, depthWrite: false
-        }));
-        scene.add(dot);
-        agentDots.push(dot);
-        agentMeshes.push(dot);   // keep alias in sync
-
-        // Ring: flat annulus, billboarded to camera each frame
-        const ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({
-            color: 0xff3a6e, transparent: true, opacity: 0.85,
-            side: THREE.DoubleSide, depthWrite: false
-        }));
-        scene.add(ring);
-        agentRings.push(ring);
-
-        // Label sprite
-        const lbl = makeLabel("IOLA-SAT");
-        scene.add(lbl);
-        agentLabels.push(lbl);
-    }
-
-    // Hide unused slots
-    for (let i = agents.length; i < agentDots.length; i++) {
-        agentDots[i].visible  = false;
-        agentRings[i].visible = false;
-        agentLabels[i].visible = false;
-    }
-
-    agents.forEach((agent, i) => {
-        const pos = eciToScene(agent.x, agent.y, agent.z);
-        const hex = MODE_COLORS[agent.mode] || 0xff3a6e;
-
-        // Dot
-        agentDots[i].geometry.attributes.position.setXYZ(0, pos.x, pos.y, pos.z);
-        agentDots[i].geometry.attributes.position.needsUpdate = true;
-        agentDots[i].material.color.setHex(hex);
-        agentDots[i].visible  = true;
-        agentDots[i].userData = agent;
-
-        // Ring
-        agentRings[i].position.copy(pos);
-        agentRings[i].material.color.setHex(hex);
-        agentRings[i].visible = true;
-
-        // Label — positioned slightly above
-        agentLabels[i].position.set(pos.x, pos.y + 0.28, pos.z);
-        // Rebuild label text only if name or mode changed
-        const labelText = `${agent.name || "IOLA"} · ${(agent.mode||"").replace("_"," ")}`;
-        if (agentLabels[i].userData.lastText !== labelText) {
-            agentLabels[i].userData.lastText = labelText;
-            const canvas = agentLabels[i].material.map.image;
-            const ctx = canvas.getContext("2d");
-            ctx.clearRect(0, 0, 256, 48);
-            ctx.font      = "bold 18px monospace";
-            ctx.fillStyle = `#${hex.toString(16).padStart(6,"0")}`;
-            ctx.textAlign = "center";
-            ctx.fillText(labelText, 128, 30);
-            agentLabels[i].material.map.needsUpdate = true;
-        }
-        agentLabels[i].visible = true;
+// ── SSE: satellite stream (for top-bar freshness) ─────────────────────────────
+function connectSatStream() {
+    const src = new EventSource(`${API_BASE}/stream/satellites`);
+    src.addEventListener("satellite_batch", e => {
+        try {
+            const d = JSON.parse(e.data);
+            // Top bar already updates via worker positions; update freshness here
+            updateTopBarFreshness(d.propagated_at);
+        } catch(_) {}
+    });
+    src.addEventListener("error", () => {
+        setTimeout(connectSatStream, 10000);
+        src.close();
     });
 }
 
-function makeBar(label, pct, cls) {
-    const row   = document.createElement("div"); row.className = "bar-row";
-    const lbl   = document.createElement("div"); lbl.className = "bar-label"; lbl.textContent = label;
-    const track = document.createElement("div"); track.className = "bar-track";
-    const fill  = document.createElement("div"); fill.className = `bar-fill ${cls}`; fill.style.width = `${pct}%`;
-    const val   = document.createElement("div"); val.className = "bar-val"; val.textContent = `${Math.round(pct)}%`;
-    track.appendChild(fill); row.append(lbl, track, val);
-    return row;
+// ── SSE: conjunction stream ────────────────────────────────────────────────────
+function connectConjStream() {
+    const src = new EventSource(`${API_BASE}/stream/conjunctions`);
+    src.addEventListener("conjunction_update", e => {
+        try {
+            const d = JSON.parse(e.data);
+            const all = [...(d.critical || []), ...(d.high || [])];
+            if (all.length > 0 || conjEvents.length === 0) {
+                // Only replace feed if we have data
+            }
+            updateConjFeed(d);
+        } catch(_) {}
+    });
+    src.addEventListener("catalog_health", e => {
+        try { updateCatalogHealth(JSON.parse(e.data)); } catch(_) {}
+    });
+    src.addEventListener("error", () => {
+        setTimeout(connectConjStream, 15000);
+        src.close();
+    });
 }
 
-function renderAgentCards(agents) {
-    const container = document.getElementById("agent-cards");
-    // Clear safely — no user data involved
+// ── Polling fallback: load conjunctions/active ────────────────────────────────
+async function loadConjunctionsActive() {
+    try {
+        const r = await fetch(`${API_BASE}/conjunctions/active`);
+        const d = await r.json();
+        // Build same shape as SSE event
+        const events = d.conjunctions || [];
+        const crit = events.filter(e => e.risk?.risk_level === "CRITICAL");
+        const high = events.filter(e => e.risk?.risk_level === "HIGH");
+        updateConjFeed({ screened_at: d.screened_at, summary: d.summary, critical: crit, high: high, total_active: d.conjunctions_found });
+        conjEvents = events;
+    } catch(e) { console.warn("conjunctions/active:", e); }
+}
+
+async function loadCatalogHealth() {
+    try {
+        const r = await fetch(`${API_BASE}/catalog-health`);
+        updateCatalogHealth(await r.json());
+    } catch(e) { console.warn("catalog-health:", e); }
+}
+
+async function loadShellDensity() {
+    try {
+        const r = await fetch(`${API_BASE}/shell-density`);
+        renderShellDensity(await r.json());
+    } catch(e) { console.warn("shell-density:", e); }
+}
+
+// Initial loads
+loadConjunctionsActive();
+loadCatalogHealth();
+loadShellDensity();
+// Refresh every 90 seconds
+setInterval(loadConjunctionsActive, 90000);
+setInterval(loadCatalogHealth, 300000);
+setInterval(loadShellDensity, 300000);
+
+// Also try SSE (may not work on all backends)
+connectSatStream();
+connectConjStream();
+
+// ── UI renderers ──────────────────────────────────────────────────────────────
+function updateTopBarFreshness(propagated_at) {
+    if (!propagated_at) return;
+    try {
+        const age_h = (Date.now() - new Date(propagated_at).getTime()) / 3600000;
+        const dot = document.getElementById("freshness-dot");
+        const disp = document.getElementById("tle-age-display");
+        dot.className = age_h < 8 ? "" : age_h < 24 ? "aging" : age_h < 72 ? "stale" : "critical";
+        disp.textContent = age_h < 1 ? `${Math.round(age_h*60)}m ago` : `${age_h.toFixed(1)}h ago`;
+    } catch(_) {}
+}
+
+function updateCatalogHealth(d) {
+    const stats = d.tle_age_stats || {};
+    const med   = stats.median_hours;
+    const dot   = document.getElementById("freshness-dot");
+    const fDot  = document.getElementById("sys-freshness-dot");
+    const fVal  = document.getElementById("sys-freshness-val");
+    const fStatus = d.freshness_status || "ok";
+
+    dot.className = fStatus === "ok" ? "" : fStatus;
+    fDot.className = `sys-dot sys-${fStatus === "ok" ? "ok" : fStatus === "aging" ? "warn" : "err"}`;
+    fVal.textContent = fStatus.toUpperCase();
+
+    if (med != null) {
+        document.getElementById("tle-age-display").textContent = `${med.toFixed(1)}h`;
+    }
+    document.getElementById("sys-errors-val").textContent =
+        (d.tle_age_stats?.stale_count != null) ? `${d.tle_age_stats.stale_count} stale` : "—";
+
+    // Update catalog size
+    if (d.catalog_size) {
+        document.getElementById("top-catalog-size").textContent = d.catalog_size.toLocaleString();
+    }
+}
+
+function renderShellDensity(data) {
+    const container = document.getElementById("density-bands");
     while (container.firstChild) container.removeChild(container.firstChild);
 
-    agents.forEach(agent => {
-        const battPct  = Math.max(0, Math.min(100, agent.battery_pct));
-        const storePct = Math.max(0, Math.min(100, agent.storage_pct));
+    const bands = (data.bands || []).slice().reverse(); // show high altitude at top
+    bands.forEach(b => {
+        const row = document.createElement("div");
+        row.className = "density-band-row";
+        row.dataset.alt = b.band_centre_km;
 
-        const card = document.createElement("div");
-        card.className = "agent-card";
+        const altEl = document.createElement("div");
+        altEl.className = "band-alt";
+        altEl.textContent = b.band_centre_km + "km";
 
-        // Header: name + mode badge — all textContent, no innerHTML
-        const header = document.createElement("div"); header.className = "agent-card-header";
-        const nameEl = document.createElement("div"); nameEl.className = "agent-name";
-        const rawName = agent.name || "";
-        nameEl.textContent = rawName.length > 18 ? rawName.substring(0, 18) + "…" : rawName;
+        const track = document.createElement("div");
+        track.className = "band-track";
+        const fill = document.createElement("div");
+        fill.className = "band-fill";
+        fill.style.width = `${Math.round(b.density_factor * 100)}%`;
+        fill.style.background = b.density_factor >= 1.0 ? "#ff3a3a"
+                               : b.density_factor >= 0.7 ? "#ff8c00"
+                               : b.density_factor >= 0.3 ? "#ffcc00"
+                               : "#00ff88";
+        track.appendChild(fill);
 
-        const modeEl = document.createElement("div");
-        const safeMode = (agent.mode || "IDLE").replace(/[^A-Z_]/g, "");  // whitelist A-Z and _
-        modeEl.className = `agent-mode ${safeMode}`;
-        modeEl.textContent = safeMode.replace("_", " ");
+        const count = document.createElement("div");
+        count.className = "band-count";
+        count.textContent = b.object_count > 999 ? (b.object_count/1000).toFixed(1)+"k" : b.object_count;
 
-        header.append(nameEl, modeEl);
+        row.append(altEl, track, count);
+        row.addEventListener("click", () => {
+            document.querySelectorAll(".density-band-row").forEach(r => r.classList.remove("selected"));
+            row.classList.add("selected");
+        });
+        container.appendChild(row);
+    });
+}
 
-        // Bars
-        const bars = document.createElement("div"); bars.className = "agent-bars";
-        bars.append(makeBar("BATTERY", battPct, "battery"), makeBar("STORAGE", storePct, "storage"));
+function updateConjFeed(data) {
+    const events = [...(data.critical || []), ...(data.high || [])];
+    conjEvents = events;
 
-        // Status line
-        const status = document.createElement("div");
-        status.style.cssText = "font-size:8px;color:rgba(255,255,255,0.3);margin-top:5px;";
-        status.textContent = `${Math.round(agent.altitude_km)} km · ${agent.sunlit ? "SUNLIT" : "ECLIPSE"}`;
+    // Top bar
+    const summary = data.summary || {};
+    document.getElementById("top-conj-count").textContent = data.total_active ?? events.length;
+    document.getElementById("top-critical-count").textContent = summary.CRITICAL ?? 0;
 
-        if (agent.in_contact_window) {
-            const badge = document.createElement("span"); badge.className = "gs-badge";
-            badge.textContent = "IN WINDOW";
-            status.append(" ", badge);
-        }
+    // Feed summary badges
+    const sumEl = document.getElementById("feed-summary");
+    sumEl.innerHTML = "";
+    [["CRITICAL", summary.CRITICAL||0], ["HIGH", summary.HIGH||0], ["MODERATE", summary.MODERATE||0]].forEach(([tier, n]) => {
+        const b = document.createElement("span");
+        b.className = `tier-badge tier-${tier}`;
+        b.textContent = `${n} ${tier}`;
+        sumEl.appendChild(b);
+    });
 
-        // LOCATE button — pans camera to this agent and shows its arc
-        const locateBtn = document.createElement("button");
-        locateBtn.className = "locate-btn";
-        locateBtn.textContent = "LOCATE";
-        locateBtn.addEventListener("click", () => {
-            const idx = meshAgents.findIndex(a => a.norad_id === agent.norad_id);
-            showArc(idx);
-            if (idx >= 0 && agentRings[idx]) {
-                flyToAgent(agentRings[idx].position.clone());
-            }
+    // Age
+    if (data.screened_at) {
+        const ageMin = Math.round((Date.now() - new Date(data.screened_at).getTime()) / 60000);
+        document.getElementById("feed-age").textContent = `Updated ${ageMin}m ago`;
+    }
+
+    // Event rows
+    const list = document.getElementById("conj-list");
+    while (list.firstChild) list.removeChild(list.firstChild);
+
+    if (!events.length) {
+        const empty = document.createElement("div");
+        empty.className = "conj-event";
+        empty.style.textAlign = "center";
+        empty.style.cssText += "color:rgba(255,255,255,0.2);font-size:9px;padding:16px;";
+        empty.textContent = "No CRITICAL or HIGH events in current screen";
+        list.appendChild(empty);
+        return;
+    }
+
+    events.forEach(ev => {
+        const risk = ev.risk || {};
+        const tier = risk.risk_level || "LOW";
+        const key  = `${ev.object_1_norad}_${ev.object_2_norad}`;
+
+        const row = document.createElement("div");
+        row.className = "conj-event" + (selectedConjKey === key ? " selected" : "");
+        row.dataset.key = key;
+
+        const ind = document.createElement("div");
+        ind.className = `conj-tier-indicator ind-${tier}`;
+
+        const names = document.createElement("div");
+        names.className = "conj-names";
+        const na = document.createElement("div"); na.className = "conj-name-a";
+        na.textContent = truncate(ev.object_1_name || ev.object_1_norad, 20);
+        const nb = document.createElement("div"); nb.className = "conj-name-b";
+        nb.textContent = truncate(ev.object_2_name || ev.object_2_norad, 20);
+        names.append(na, nb);
+
+        const miss = document.createElement("div");
+        miss.className = "conj-miss";
+        const mv = document.createElement("div");
+        mv.className = `conj-miss-val miss-${tier}`;
+        mv.textContent = (ev.miss_distance_km || 0).toFixed(2);
+        const mu = document.createElement("div"); mu.className = "conj-miss-unit";
+        mu.textContent = "km";
+        miss.append(mv, mu);
+
+        const hdr = document.createElement("div");
+        hdr.className = "conj-event-header";
+        hdr.append(ind, names, miss);
+
+        const meta = document.createElement("div");
+        meta.className = "conj-meta";
+
+        const tca = document.createElement("div");
+        tca.className = "conj-tca";
+        tca.textContent = formatTCA(ev.tca_utc, ev.tca_seconds_from_now);
+
+        const flags = document.createElement("div");
+        flags.className = "conj-flags";
+        (ev.context_flags || []).slice(0, 4).forEach(f => {
+            const fl = document.createElement("span");
+            fl.className = `flag flag-${f}`;
+            fl.textContent = f.replace("_", " ");
+            flags.appendChild(fl);
         });
 
-        card.append(header, bars, status, locateBtn);
-        container.appendChild(card);
+        meta.append(tca, flags);
+        row.append(hdr, meta);
+
+        row.addEventListener("click", () => {
+            selectedConjKey = key;
+            document.querySelectorAll(".conj-event").forEach(r => r.classList.remove("selected"));
+            row.classList.add("selected");
+            showConjInspector(ev);
+        });
+
+        list.appendChild(row);
     });
+
+    // Update arcs
+    updateConjunctionArcs();
 }
 
-function updateStepDisplay(step, episodeId) {
-    const d = document.getElementById("step-display");
-    d.style.display = "block";
-    document.getElementById("step-num").innerText = step;
-    document.getElementById("ep-id").innerText = episodeId ? episodeId.substring(0,12) : "—";
-}
-
-// Step interval expected by the server for each time mode (real ms between steps).
-// Used for dead reckoning — we advance the reference clock by this amount on each
-// step arrival instead of resetting to Date.now(), eliminating network jitter.
-const STEP_INTERVAL_MS = { realtime: 60000, compressed: 1000, step: null };
-
-function applyMeshState(data) {
-    meshAgents = data.agents || [];
-
-    // Dead reckoning: advance simEpochRealMs by the expected interval rather than
-    // resetting to Date.now(). This keeps extrapolation continuous across steps
-    // regardless of network timing variability (eliminates PASS mode jitter).
-    if (data.sim_epoch_utc) {
-        const newEpochMs = new Date(data.sim_epoch_utc).getTime();
-        if (simEpochMs === null) {
-            // First step: anchor to real time
-            simEpochRealMs = Date.now();
-        } else {
-            const interval = STEP_INTERVAL_MS[timeMode];
-            if (interval !== null) {
-                simEpochRealMs += interval;
-            } else {
-                simEpochRealMs = Date.now();  // STEP mode: manual, always anchor to now
-            }
-        }
-        simEpochMs = newEpochMs;
+function formatTCA(tca_utc, tca_seconds) {
+    if (tca_utc) {
+        const diff = (new Date(tca_utc) - Date.now()) / 1000;
+        if (diff < 0) return "PAST TCA";
+        if (diff < 3600) return `TCA in ${Math.round(diff/60)}m`;
+        if (diff < 86400) return `TCA in ${(diff/3600).toFixed(1)}h`;
+        return `TCA in ${(diff/86400).toFixed(1)}d`;
     }
-
-    // Store velocities for per-frame Keplerian extrapolation
-    meshAgents.forEach(a => {
-        if (a.vx !== undefined) agentVelocities[a.norad_id] = { vx: a.vx, vy: a.vy, vz: a.vz };
-    });
-
-    updateAgentMeshes(meshAgents);
-    renderAgentCards(meshAgents);
-    if (data.episode_step !== undefined) updateStepDisplay(data.episode_step, data.episode_id);
+    if (tca_seconds != null) {
+        if (tca_seconds < 0) return "PAST TCA";
+        if (tca_seconds < 3600) return `TCA in ${Math.round(tca_seconds/60)}m`;
+        return `TCA in ${(tca_seconds/3600).toFixed(1)}h`;
+    }
+    return "TCA unknown";
 }
 
-// ─── Spawn ────────────────────────────────────────────────────────────────────
-document.getElementById("spawn-btn").addEventListener("click", async () => {
-    const btn = document.getElementById("spawn-btn");
-    btn.disabled = true;
-    btn.innerText = "SPAWNING…";
+function truncate(s, n) { return s && s.length > n ? s.substring(0, n-1) + "…" : (s || ""); }
 
-    const fleetSize = parseInt(document.getElementById("fleet-size").value) || 3;
-    // Signal intentional stop so auto-reconnect doesn't fire during restart
-    meshActive = false;
-    if (meshWS) { meshWS.close(); meshWS = null; }
+function showConjInspector(ev) {
+    const risk = ev.risk || {};
+    const cdm  = ev.cdm  || {};
+    const tier = risk.risk_level || "LOW";
 
+    document.getElementById("conj-banner").className = `risk-tier-banner banner-${tier}`;
+    document.getElementById("conj-banner").textContent = tier;
+
+    // Object 1
+    const o1 = cdm.OBJECT_1 || {};
+    renderGrid("conj-obj1", [
+        ["NAME",    ev.object_1_name || o1.NAME || ev.object_1_norad],
+        ["NORAD",   ev.object_1_norad || o1.NORAD_ID],
+        ["CLASS",   o1.ORBITAL_CLASS || "—"],
+        ["ALT",     o1.ALTITUDE_KM ? `${o1.ALTITUDE_KM.toFixed(1)} km` : "—"],
+        ["B*",      o1.BSTAR != null ? o1.BSTAR.toExponential(2) : "—"],
+        ["TLE AGE", o1.TLE_EPOCH ? formatAge(o1.TLE_EPOCH) : "—"],
+    ]);
+
+    // Object 2
+    const o2 = cdm.OBJECT_2 || {};
+    renderGrid("conj-obj2", [
+        ["NAME",    ev.object_2_name || o2.NAME || ev.object_2_norad],
+        ["NORAD",   ev.object_2_norad || o2.NORAD_ID],
+        ["CLASS",   o2.ORBITAL_CLASS || "—"],
+        ["ALT",     o2.ALTITUDE_KM ? `${o2.ALTITUDE_KM.toFixed(1)} km` : "—"],
+        ["B*",      o2.BSTAR != null ? o2.BSTAR.toExponential(2) : "—"],
+        ["TLE AGE", o2.TLE_EPOCH ? formatAge(o2.TLE_EPOCH) : "—"],
+    ]);
+
+    // Geometry
+    const approach = ev.approach || {};
+    renderGrid("conj-geometry", [
+        ["TCA",          formatTCA(ev.tca_utc, ev.tca_seconds_from_now)],
+        ["MISS DIST",    `${(ev.miss_distance_km || 0).toFixed(3)} km`],
+        ["EFF MISS",     cdm.EFFECTIVE_MISS_DISTANCE_KM != null ? `${cdm.EFFECTIVE_MISS_DISTANCE_KM.toFixed(3)} km` : "—"],
+        ["UNCERTAINTY",  ev.worst_case_uncertainty_km != null ? `${ev.worst_case_uncertainty_km.toFixed(2)} km` : (cdm.WORST_CASE_UNCERTAINTY_KM != null ? `${cdm.WORST_CASE_UNCERTAINTY_KM.toFixed(2)} km` : "—")],
+        ["REL VELOCITY", ev.relative_velocity_kms != null ? `${ev.relative_velocity_kms.toFixed(3)} km/s` : (cdm.RELATIVE_VELOCITY_KMS != null ? `${cdm.RELATIVE_VELOCITY_KMS.toFixed(3)} km/s` : "—")],
+        ["SHELL DENSITY",ev.shell_density_factor != null ? `${(ev.shell_density_factor * 100).toFixed(0)}%` : "—"],
+        ["APPROACHING",  ev.approaching ? "YES" : "NO"],
+        ["TCA REFINED",  ev.tca_refined ? "YES" : "NO"],
+        ["FLAGS",        (ev.context_flags || []).join(", ") || "—"],
+    ]);
+
+    // Risk
+    const rc = risk.risk_components || cdm.RISK_COMPONENTS || {};
+    renderGrid("conj-risk", [
+        ["TIER",         tier],
+        ["COMPOSITE",    risk.composite_score != null ? risk.composite_score.toFixed(4) : (cdm.COMPOSITE_RISK_SCORE != null ? cdm.COMPOSITE_RISK_SCORE.toFixed(4) : "—")],
+        ["Pc",           risk.probability_of_collision != null ? risk.probability_of_collision.toExponential(2) : "—"],
+        ["W:DISTANCE",   rc.distance != null ? rc.distance.toFixed(3) : "—"],
+        ["W:VELOCITY",   rc.velocity != null ? rc.velocity.toFixed(3) : "—"],
+        ["W:TIME URG",   rc.time_urgency != null ? rc.time_urgency.toFixed(3) : "—"],
+        ["W:TLE AGE",    rc.tle_age != null ? rc.tle_age.toFixed(3) : "—"],
+        ["W:SHELL DENS", rc.shell_density != null ? rc.shell_density.toFixed(3) : "—"],
+    ]);
+
+    // Recommended action
+    const ra = cdm.RECOMMENDED_ACTION || {};
+    const action = ra.action || "MONITOR";
+    const actionEl = document.getElementById("action-text");
+    actionEl.className = `action-text action-${action}`;
+    let actionStr = action;
+    if (ra.delta_v_ms != null) actionStr += `  ΔV ~${ra.delta_v_ms.toFixed(2)} m/s`;
+    if (ra.latest_maneuver_time_seconds != null) {
+        const mins = Math.round(ra.latest_maneuver_time_seconds / 60);
+        actionStr += `  BURN BY T-${mins}m`;
+    }
+    actionEl.textContent = actionStr;
+
+    document.getElementById("conj-inspector").classList.remove("hidden");
+    document.getElementById("sat-inspector").classList.add("hidden");
+}
+
+function renderGrid(id, rows) {
+    const el = document.getElementById(id);
+    el.innerHTML = "";
+    rows.forEach(([lbl, val]) => {
+        const l = document.createElement("div"); l.className = "cdm-lbl"; l.textContent = lbl;
+        const v = document.createElement("div"); v.className = "cdm-val"; v.textContent = val ?? "—";
+        el.append(l, v);
+    });
+}
+
+function formatAge(epoch_str) {
     try {
-        // Step 1: single health check — if it responds, proceed; if not, still try spawn.
-        // The server may be alive (serving /tles) even if /health cold-starts slowly.
-        // We never block spawn on health; it is informational only.
-        btn.innerText = "CONNECTING…";
-        try {
-            await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(5000) });
-        } catch(_) {}   // proceed regardless — spawn will surface the real error
+        const age_h = (Date.now() - new Date(epoch_str).getTime()) / 3600000;
+        return age_h < 1 ? `${Math.round(age_h*60)}m` : `${age_h.toFixed(1)}h`;
+    } catch(_) { return "—"; }
+}
 
-        // Step 2: kick off spawn (returns immediately — no timeout, server responds fast)
-        btn.innerText = "SPAWNING…";
-        const spawnRes = await fetch(
-            `${API_BASE}/mesh/spawn?fleet_size=${fleetSize}&seed=42`,
-            { method: "POST" }
-        );
-        const spawnData = await spawnRes.json();
-        if (spawnData.state === "error") { btn.disabled = false; btn.innerText = "SPAWN FLEET"; alert(spawnData.error); return; }
-
-        // Step 3: poll /mesh/spawn/status until ready.
-        // Render free tier pre-warm takes up to 5 min on cold start — poll for 7 min.
-        let ready = false;
-        for (let poll = 0; poll < 140; poll++) {
-            await new Promise(r => setTimeout(r, 3000));
-            const elapsed = Math.round((poll+1)*3);
-            btn.innerText = elapsed < 60
-                ? `SPAWNING… ${elapsed}s`
-                : `SPAWNING… ${Math.floor(elapsed/60)}m ${elapsed%60}s`;
-            try {
-                const s = await fetch(`${API_BASE}/mesh/spawn/status`, { signal: AbortSignal.timeout(5000) });
-                const sd = await s.json();
-                if (sd.state === "ready") { ready = true; applyMeshState(sd); break; }
-                if (sd.state === "error") { alert(`Spawn error: ${sd.error}`); break; }
-            } catch(_) {}
-        }
-
-        if (!ready) { btn.disabled = false; btn.innerText = "SPAWN FLEET"; alert("Spawn timed out. Try again."); return; }
-
-        meshActive = true;
-        btn.innerText = "RESTART";
-        btn.disabled  = false;
-        startStream();
-    } catch(e) {
-        btn.disabled  = false;
-        btn.innerText = "SPAWN FLEET";
-        console.error("Spawn failed:", e);
-        alert(`Spawn failed: ${e.message}. Check browser console for details.`);
-    }
+document.getElementById("conj-back").addEventListener("click", () => {
+    document.getElementById("conj-inspector").classList.add("hidden");
+    document.getElementById("conj-feed").style.display = "";
+    selectedConjKey = null;
+    document.querySelectorAll(".conj-event").forEach(r => r.classList.remove("selected"));
 });
 
-// ─── Time mode selection — controls ALL satellite simulation speed ────────────
-document.querySelectorAll(".time-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-        document.querySelectorAll(".time-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        timeMode = btn.dataset.mode;
-        lastRealMs = Date.now();
-        if (timeMode === "realtime") simTimeMs = Date.now();
-        // Reset the dead-reckoning anchor so the first step in the new mode
-        // does not extrapolate from a stale reference, which would throw agents
-        // to wrong positions (especially on LIVE→PASS where the multiplier jumps 60x)
-        simEpochMs = null;
-        simEpochRealMs = null;
+// ── Conjunction arc visualization ─────────────────────────────────────────────
+function getScenePos(norad_id) {
+    for (let c = 0; c < 3; c++) {
+        const metas = classPts[c].userData.metas;
+        if (!metas) continue;
+        const m = metas.find(m => m.norad_id === norad_id);
+        if (m) return new THREE.Vector3(m.x/1000, m.y/1000, m.z/1000);
+    }
+    return null;
+}
 
-        const stepBtn = document.getElementById("step-btn");
-        stepBtn.style.display = timeMode === "step" ? "block" : "none";
+function updateConjunctionArcs() {
+    // Hide all arcs
+    Object.values(conjArcLines).forEach(l => { l.visible = false; });
 
-        // Reconnect agent stream if active
-        if (meshActive) {
-            if (meshWS) { meshWS.close(); meshWS = null; }
-            startStream();
+    conjEvents.forEach(ev => {
+        const tier = ev.risk?.risk_level;
+        if (!["CRITICAL","HIGH"].includes(tier)) return;
+
+        const posA = getScenePos(ev.object_1_norad);
+        const posB = getScenePos(ev.object_2_norad);
+        if (!posA || !posB) return;
+
+        const key = `${ev.object_1_norad}_${ev.object_2_norad}`;
+        if (!conjArcLines[key]) {
+            const mat = tier === "CRITICAL" ? ARC_MAT_CRITICAL.clone() : ARC_MAT_HIGH.clone();
+            const line = new THREE.Line(new THREE.BufferGeometry(), mat);
+            scene.add(line);
+            conjArcLines[key] = line;
         }
+
+        // Draw straight line between the two positions (geodesic arc approximation)
+        const pts = [posA, posB];
+        conjArcLines[key].geometry.dispose();
+        conjArcLines[key].geometry = new THREE.BufferGeometry().setFromPoints(pts);
+        conjArcLines[key].visible = true;
     });
-});
+}
 
-// Manual step — advances simulation clock by one 60-second step for all satellites + agents
-document.getElementById("step-btn").addEventListener("click", () => {
-    simTimeMs += 60 * 1000;   // advance one decision step for all satellites
-    if (!pendingPropagate && workerReady) {
-        pendingPropagate = true;
-        worker.postMessage({ type: "propagate", timestamp: simTimeMs });
-    }
-    if (meshWS && timeMode === "step") {
-        meshWS.send(JSON.stringify({ action: "step" }));
-    }
-});
+// ── Satellite click inspector ─────────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
 
-// ─── WebSocket stream ─────────────────────────────────────────────────────────
-// The stream is designed to be permanent for the lifetime of the browser tab.
-// The server loops episodes automatically — the WebSocket never closes from the
-// server side. If it closes unexpectedly (network blip, Render restart),
-// we reconnect after a short delay so the view resumes without user action.
+renderer.domElement.addEventListener("click", async (e) => {
+    mouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    raycaster.params.Points.threshold = camera.position.length() * 0.008;
 
-let _streamReconnectTimer = null;
+    for (let c = 0; c < 3; c++) {
+        if (!classPts[c].visible) continue;
+        const hits = raycaster.intersectObject(classPts[c]);
+        if (hits.length > 0) {
+            const meta = classPts[c].userData.metas?.[hits[0].index];
+            if (!meta) continue;
+            const norad = meta.norad_id;
 
-function startStream() {
-    if (_streamReconnectTimer) { clearTimeout(_streamReconnectTimer); _streamReconnectTimer = null; }
-    const ws = new WebSocket(`${WS_BASE}/mesh/stream?mode=${timeMode}`);
-    meshWS = ws;
-
-    ws.onmessage = (e) => {
-        const data = JSON.parse(e.data);
-        if (data.error) { console.error("Mesh stream error:", data.error); return; }
-        if (data.type === "episode_end") {
-            // Server is resetting for next episode — reset step counter to 0
-            document.getElementById("step-num").innerText = "0";
-            document.getElementById("ep-id").innerText = `ep_${String(data.next_episode_seed || 0).padStart(6, "0")}`;
-            simEpochMs = null;   // re-anchor on the first step of the next episode
-            simEpochRealMs = null;
+            // Fetch full satellite data
+            showSatInspectorLoading(meta);
+            try {
+                const r = await fetch(`${API_BASE}/satellite/${norad}`);
+                const sat = await r.json();
+                if (sat.error) {
+                    showSatInspectorBasic(meta);
+                } else {
+                    showSatInspectorFull(sat);
+                }
+            } catch(_) {
+                showSatInspectorBasic(meta);
+            }
             return;
         }
-        applyMeshState(data);
-    };
+    }
 
-    ws.onerror = (e) => console.error("WS error", e);
+    // Click on empty space — hide inspector if not in conjunction mode
+    if (!selectedConjKey) {
+        document.getElementById("sat-inspector").classList.add("hidden");
+    }
+});
 
-    ws.onclose = () => {
-        if (meshWS !== ws) return;   // was replaced intentionally (time mode switch)
-        meshWS = null;
-        if (!meshActive) return;     // session was deliberately ended
-        // Unexpected close — wait 3s then reconnect silently
-        _streamReconnectTimer = setTimeout(() => {
-            if (meshActive) startStream();
-        }, 3000);
-    };
+function showSatInspectorLoading(meta) {
+    document.getElementById("insp-name").textContent = meta.name || "Loading…";
+    document.getElementById("insp-norad").textContent = `NORAD ${meta.norad_id}`;
+    document.getElementById("insp-grid").innerHTML = "<div style='color:rgba(255,255,255,0.3);font-size:9px;grid-column:1/-1;padding:4px 0'>Fetching intelligence…</div>";
+    document.getElementById("sat-inspector").classList.remove("hidden");
+    document.getElementById("conj-inspector").classList.add("hidden");
 }
 
-// ─── Filters & UI ─────────────────────────────────────────────────────────────
+function showSatInspectorBasic(meta) {
+    document.getElementById("insp-name").textContent = meta.name || "Unknown";
+    document.getElementById("insp-norad").textContent = `NORAD ${meta.norad_id}`;
+    renderSatGrid([
+        ["ALTITUDE", `${Math.round(meta.altitude)} km`],
+        ["CLASS",    CLASS_NAMES[meta.classIdx]],
+    ]);
+    document.getElementById("sat-inspector").classList.remove("hidden");
+}
+
+function showSatInspectorFull(sat) {
+    document.getElementById("insp-name").textContent = sat.name || "Unknown";
+    document.getElementById("insp-norad").textContent = `NORAD ${sat.norad_id}`;
+
+    const ageH = sat.tle_age_hours;
+    const ageClass = ageH == null ? "" : ageH < 8 ? "ok" : ageH < 24 ? "warn" : ageH < 72 ? "stale" : "critical";
+    const ageStr = ageH != null ? (ageH < 1 ? `${Math.round(ageH*60)}m` : `${ageH.toFixed(1)}h`) : "—";
+
+    const uncert = sat.uncertainty_km;
+    const uncertClass = uncert == null ? "" : uncert < 5 ? "ok" : uncert < 15 ? "warn" : "critical";
+
+    renderSatGrid([
+        ["SECTION:ORBITAL STATE", null],
+        ["ALTITUDE",   `${(sat.altitude_km||0).toFixed(2)} km`],
+        ["SPEED",      `${(sat.speed_km_s||0).toFixed(4)} km/s`],
+        ["CLASS",      sat.orbital_class || "—"],
+        ["SUNLIT",     sat.sunlit ? "YES" : "ECLIPSE"],
+        ["MODE",       sat.propagation_mode || "—"],
+        ["SECTION:TLE DATA", null],
+        ["EPOCH",      sat.epoch ? sat.epoch.substring(0,19).replace("T"," ")+" UTC" : "—"],
+        ["TLE AGE",    ageStr, ageClass],
+        ["B* (DRAG)",  sat.bstar != null ? sat.bstar.toExponential(3) : "—"],
+        ["SECTION:POSITION CONFIDENCE", null],
+        ["UNCERTAINTY", uncert != null ? `${uncert.toFixed(2)} km` : "—", uncertClass],
+        ["SECTION:ECI COORDINATES", null],
+        ["X",          sat.x != null ? `${sat.x.toFixed(1)} km` : "—"],
+        ["Y",          sat.y != null ? `${sat.y.toFixed(1)} km` : "—"],
+        ["Z",          sat.z != null ? `${sat.z.toFixed(1)} km` : "—"],
+        ["VX",         sat.vx != null ? `${sat.vx.toFixed(4)} km/s` : "—"],
+        ["VY",         sat.vy != null ? `${sat.vy.toFixed(4)} km/s` : "—"],
+        ["VZ",         sat.vz != null ? `${sat.vz.toFixed(4)} km/s` : "—"],
+    ], ageClass, uncertClass);
+
+    document.getElementById("sat-inspector").classList.remove("hidden");
+    document.getElementById("conj-inspector").classList.add("hidden");
+}
+
+function renderSatGrid(rows) {
+    const grid = document.getElementById("insp-grid");
+    grid.innerHTML = "";
+    rows.forEach(([lbl, val, cls]) => {
+        if (lbl.startsWith("SECTION:")) {
+            const sec = document.createElement("div");
+            sec.className = "insp-section-title";
+            sec.textContent = lbl.replace("SECTION:", "");
+            grid.appendChild(sec);
+            return;
+        }
+        const l = document.createElement("div"); l.className = "insp-lbl"; l.textContent = lbl;
+        const v = document.createElement("div"); v.className = `insp-val ${cls || ""}`;
+        v.textContent = val ?? "—";
+        grid.append(l, v);
+    });
+}
+
+// ── Filters & controls ────────────────────────────────────────────────────────
 document.querySelectorAll(".filter-btn").forEach(btn => {
     btn.addEventListener("click", () => {
         btn.classList.toggle("active");
@@ -847,256 +1086,48 @@ document.querySelectorAll(".filter-btn").forEach(btn => {
 
 document.getElementById("pause-btn").addEventListener("click", () => {
     paused = !paused;
-    document.getElementById("pause-btn").innerText = paused ? "RESUME" : "PAUSE";
+    document.getElementById("pause-btn").textContent = paused ? "RESUME" : "PAUSE";
 });
 
-// ─── Camera fly-to ───────────────────────────────────────────────────────────
-// Animated lerp from current camera position to a point ~2× closer to the target.
-// Runs over ~60 frames (≈1 second at 60fps). No library needed.
-let flyTarget = null;  // {toPos: Vector3, toTarget: Vector3, frames: number, total: number}
+// ── UTC clock ─────────────────────────────────────────────────────────────────
+function updateClock() {
+    const now = new Date();
+    document.getElementById("utc-clock").textContent =
+        now.toISOString().substring(0,19).replace("T"," ") + " UTC";
+}
+updateClock();
+setInterval(updateClock, 1000);
 
-function flyToAgent(agentPos) {
-    // Destination: camera stays at same distance from Earth but shifts toward agent
-    const dist    = camera.position.length();
-    const dir     = agentPos.clone().normalize();
-    const toPos   = dir.multiplyScalar(dist * 0.95);  // slightly closer
-    flyTarget = { toPos, toTarget: agentPos.clone(), frames: 0, total: 60 };
+// ── GMST ──────────────────────────────────────────────────────────────────────
+function gmstFromMs(ms) {
+    const jd = ms / 86400000 + 2440587.5;
+    return ((280.46061837 + 360.98564736629 * (jd - 2451545.0)) % 360) * Math.PI / 180;
 }
 
-// Called from animate() each frame
-function tickFly() {
-    if (!flyTarget) return;
-    flyTarget.frames++;
-    const t = Math.min(flyTarget.frames / flyTarget.total, 1.0);
-    const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;   // smooth quadratic ease in-out
-    camera.position.lerp(flyTarget.toPos, ease * 0.06);
-    controls.target.lerp(flyTarget.toTarget, ease * 0.06);
-    controls.update();
-    if (flyTarget.frames >= flyTarget.total) flyTarget = null;
-}
-
-// ─── Orbital arc visualization ────────────────────────────────────────────────
-// One arc line per agent, shown when that agent is clicked.
-const arcLines = [];   // THREE.Line objects, one per possible agent
-const ARC_MATERIAL = new THREE.LineBasicMaterial({
-    color: 0x00ffaa, transparent: true, opacity: 0.35, depthWrite: false
-});
-
-// Two-body Keplerian RK4 step — same physics as server conjunction/engine.py
-// μ = 398600.4418 km³/s²  (Earth gravitational parameter, WGS84)
-const MU_KM3S2 = 398600.4418;
-
-function keplerRK4(rx, ry, rz, vx, vy, vz, dt) {
-    function accel(x, y, z) {
-        const r3 = Math.pow(x*x + y*y + z*z, 1.5);
-        return [-MU_KM3S2 * x / r3, -MU_KM3S2 * y / r3, -MU_KM3S2 * z / r3];
-    }
-    // k1
-    const a1 = accel(rx, ry, rz);
-    // k2
-    const r2x = rx + vx*dt/2, r2y = ry + vy*dt/2, r2z = rz + vz*dt/2;
-    const v2x = vx + a1[0]*dt/2, v2y = vy + a1[1]*dt/2, v2z = vz + a1[2]*dt/2;
-    const a2 = accel(r2x, r2y, r2z);
-    // k3
-    const r3x = rx + v2x*dt/2, r3y = ry + v2y*dt/2, r3z = rz + v2z*dt/2;
-    const v3x = vx + a2[0]*dt/2, v3y = vy + a2[1]*dt/2, v3z = vz + a2[2]*dt/2;
-    const a3 = accel(r3x, r3y, r3z);
-    // k4
-    const r4x = rx + v3x*dt, r4y = ry + v3y*dt, r4z = rz + v3z*dt;
-    const v4x = vx + a3[0]*dt, v4y = vy + a3[1]*dt, v4z = vz + a3[2]*dt;
-    const a4 = accel(r4x, r4y, r4z);
-    return [
-        rx + dt/6 * (vx + 2*v2x + 2*v3x + v4x),
-        ry + dt/6 * (vy + 2*v2y + 2*v3y + v4y),
-        rz + dt/6 * (vz + 2*v2z + 2*v3z + v4z),
-        vx + dt/6 * (a1[0] + 2*a2[0] + 2*a3[0] + a4[0]),
-        vy + dt/6 * (a1[1] + 2*a2[1] + 2*a3[1] + a4[1]),
-        vz + dt/6 * (a1[2] + 2*a2[2] + 2*a3[2] + a4[2]),
-    ];
-}
-
-function buildArc(agent) {
-    // Trace one full 90-min LEO pass using RK4 two-body integration (60s steps).
-    // Produces a proper Keplerian ellipse — same physics as server propagator.
-    const scale = 1 / 1000;
-    const pts   = [];
-    const vel   = agentVelocities[agent.norad_id] || { vx: 0, vy: 0, vz: 0 };
-    let rx = agent.x, ry = agent.y, rz = agent.z;
-    let vx = vel.vx,  vy = vel.vy,  vz = vel.vz;
-
-    for (let s = 0; s <= 90; s++) {
-        pts.push(new THREE.Vector3(rx * scale, ry * scale, rz * scale));
-        const next = keplerRK4(rx, ry, rz, vx, vy, vz, 60);
-        [rx, ry, rz, vx, vy, vz] = next;
-    }
-    return new THREE.BufferGeometry().setFromPoints(pts);
-}
-
-let activeArcIndex = -1;  // which agent arc is currently shown
-
-function showArc(agentIndex) {
-    // Hide all arcs first
-    arcLines.forEach(l => { l.visible = false; });
-
-    if (agentIndex < 0 || agentIndex >= meshAgents.length) { activeArcIndex = -1; return; }
-    const agent = meshAgents[agentIndex];
-
-    // Grow pool if needed
-    while (arcLines.length <= agentIndex) {
-        const line = new THREE.Line(new THREE.BufferGeometry(), ARC_MATERIAL.clone());
-        scene.add(line);
-        arcLines.push(line);
-    }
-
-    arcLines[agentIndex].geometry.dispose();
-    arcLines[agentIndex].geometry = buildArc(agent);
-    arcLines[agentIndex].visible  = true;
-    activeArcIndex = agentIndex;
-}
-
-// ─── Click inspector ──────────────────────────────────────────────────────────
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-
-renderer.domElement.addEventListener("click", (e) => {
-    mouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
-    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
-
-    // Check IOLA agents first — dots (Points), threshold scales with zoom
-    raycaster.params.Points.threshold = camera.position.length() * 0.012;
-    const visibleAgentMeshes = agentDots.filter(m => m.visible);
-    const agentHits = raycaster.intersectObjects(visibleAgentMeshes);
-    if (agentHits.length > 0) {
-        const agent = agentHits[0].object.userData;
-        if (agent && agent.norad_id) {
-            // Find index into meshAgents for arc drawing + fly-to
-            const idx = meshAgents.findIndex(a => a.norad_id === agent.norad_id);
-            showArc(idx);
-            if (idx >= 0 && agentRings[idx]) flyToAgent(agentRings[idx].position.clone());
-
-            document.getElementById("inspector-name").innerText  = agent.name;
-            document.getElementById("inspector-norad").innerText = agent.norad_id;
-            document.getElementById("inspector-class").innerText = "LEO (IOLA)";
-            document.getElementById("inspector-alt").innerText   = `${Math.round(agent.altitude_km)} km`;
-            document.getElementById("inspector-mode").innerText    = agent.mode;
-            document.getElementById("inspector-battery").innerText = `${Math.round(agent.battery_pct)}%`;
-            document.getElementById("inspector-storage").innerText = `${Math.round(agent.storage_pct)}%`;
-            document.getElementById("inspector-sunlit").innerText  = agent.sunlit ? "YES" : "NO";
-            document.getElementById("inspector-window").innerText  =
-                agent.in_contact_window ? `YES (${Math.round(agent.contact_window_remaining*90)} steps)` : "NO";
-            document.getElementById("rw-survival").innerText    = (agent.reward_breakdown?.survival  || 0).toFixed(3);
-            document.getElementById("rw-mission").innerText     = (agent.reward_breakdown?.mission   || 0).toFixed(3);
-            document.getElementById("rw-opt").innerText         = (agent.reward_breakdown?.optionality || 0).toFixed(3);
-            document.getElementById("rw-ext").innerText         = (agent.reward_breakdown?.externality || 0).toFixed(3);
-            document.getElementById("inspector-agent-section").style.display = "block";
-            document.getElementById("inspector").classList.remove("hidden");
-            return;
-        }
-    }
-
-    // Background satellites
-    raycaster.params.Points.threshold = camera.position.length() * 0.008;
-    for (let c = 0; c < 3; c++) {
-        if (!classPts[c].visible) continue;
-        const hits = raycaster.intersectObject(classPts[c]);
-        if (hits.length > 0) {
-            const meta = classPts[c].userData.metas?.[hits[0].index];
-            if (!meta) continue;
-            document.getElementById("inspector-name").innerText  = meta.name;
-            document.getElementById("inspector-norad").innerText = meta.norad_id;
-            document.getElementById("inspector-class").innerText = CLASS_NAMES[meta.classIdx];
-            document.getElementById("inspector-alt").innerText   = `${Math.round(meta.altitude)} km`;
-            document.getElementById("inspector-agent-section").style.display = "none";
-            document.getElementById("inspector").classList.remove("hidden");
-            return;
-        }
-    }
-    document.getElementById("inspector").classList.add("hidden");
-});
-
-// ─── Render loop ──────────────────────────────────────────────────────────────
+// ── Render loop ───────────────────────────────────────────────────────────────
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
 
-    // Current simulation time in ms — drives Earth rotation and Sun position
-    let currentSimMs;
-    if (meshActive && simEpochMs !== null) {
-        const realElapsedMs = Date.now() - simEpochRealMs;
-        const mult = TIME_MULTIPLIERS[timeMode] ?? 1;
-        currentSimMs = simEpochMs + realElapsedMs * mult;
-    } else {
-        currentSimMs = Date.now();
-    }
-
-    // Earth rotation: spin around +y (Three.js y-up convention, North at +y).
-    // Positive rotation.y = counterclockwise from above North Pole = west-to-east.
-    // GMST gives the angle from ECI x-axis to the Greenwich meridian, increasing
-    // eastward — so rotation.y = +GMST places geography correctly.
-    const gmst = gmstFromMs(currentSimMs);
+    const now = Date.now();
+    const gmst = gmstFromMs(now);
     earth.rotation.y      = gmst;
     atmosphere.rotation.y = gmst;
 
-    // Sun position in ECI from Vallado low-precision almanac (same formula as server).
-    // JD → Julian centuries → mean longitude → mean anomaly → ecliptic longitude
-    // → Sun ECI vector. The light and visual Sun sphere track the real Sun direction.
-    (function updateSun() {
-        const jd  = currentSimMs / 86400000 + 2440587.5;
-        const T   = (jd - 2451545.0) / 36525.0;
-        const L   = (280.460 + 36000.771 * T) % 360;
-        const M   = (357.528 + 35999.050 * T) * Math.PI / 180;
-        const lam = (L + 1.915 * Math.sin(M) + 0.020 * Math.sin(2*M)) * Math.PI / 180;
-        const eps = (23.439 - 0.0130 * T) * Math.PI / 180;
-        const r   = (1.000140 - 0.016708 * Math.cos(M) - 0.000141 * Math.cos(2*M)) * 1.495978707e8;
-        // ECI Sun vector: x toward vernal equinox, y 90° east in equatorial plane, z toward North Pole.
-        // Three.js globe uses y-up (North = +y), so we remap: scene_y = eci_z, scene_z = -eci_y.
-        const eci_x = r * Math.cos(lam);
-        const eci_y = r * Math.sin(lam) * Math.cos(eps);
-        const eci_z = r * Math.sin(lam) * Math.sin(eps);
-        const scene_x =  eci_x / 1000;
-        const scene_y =  eci_z / 1000;   // ECI North Pole → Three.js up
-        const scene_z = -eci_y / 1000;   // ECI equatorial east → Three.js -z
-        light.position.set(scene_x, scene_y, scene_z);
-        sun.position.set(scene_x, scene_y, scene_z);
+    // Sun
+    (function() {
+        const jd = now / 86400000 + 2440587.5;
+        const T  = (jd - 2451545.0) / 36525.0;
+        const L  = (280.460 + 36000.771 * T) % 360;
+        const M  = (357.528 + 35999.050 * T) * Math.PI / 180;
+        const lam = (L + 1.915*Math.sin(M) + 0.020*Math.sin(2*M)) * Math.PI / 180;
+        const eps = (23.439 - 0.0130*T) * Math.PI / 180;
+        const r  = (1.000140 - 0.016708*Math.cos(M) - 0.000141*Math.cos(2*M)) * 1.495978707e8;
+        const ex = r*Math.cos(lam), ey = r*Math.sin(lam)*Math.cos(eps), ez = r*Math.sin(lam)*Math.sin(eps);
+        light.position.set(ex/1000, ez/1000, -ey/1000);
+        sun.position.set(ex/1000, ez/1000, -ey/1000);
     })();
 
-    // Per-frame agent update: Keplerian extrapolation + ring billboard + label follow.
-    // Billboard runs unconditionally whenever agents exist — rings must always face
-    // the camera regardless of whether simEpochMs is available (training feed sends
-    // no sim_epoch_utc in old schema, but agents are still visible).
-    if (meshActive && meshAgents.length > 0) {
-        const scale = 1 / 1000;
-        // Extrapolate positions only when we have a valid simulation clock
-        const simElapsedS = (meshActive && simEpochMs !== null)
-            ? (Date.now() - simEpochRealMs) / 1000 * (TIME_MULTIPLIERS[timeMode] ?? 1)
-            : 0;  // No clock: render at last-known position, no extrapolation
-
-        meshAgents.forEach((a, i) => {
-            if (!agentDots[i] || !agentDots[i].visible) return;
-            const vel = agentVelocities[a.norad_id];
-            const dvx = vel ? vel.vx : 0;
-            const dvy = vel ? vel.vy : 0;
-            const dvz = vel ? vel.vz : 0;
-
-            const px = (a.x + dvx * simElapsedS) * scale;
-            const py = (a.y + dvy * simElapsedS) * scale;
-            const pz = (a.z + dvz * simElapsedS) * scale;
-
-            // Move dot
-            agentDots[i].geometry.attributes.position.setXYZ(0, px, py, pz);
-            agentDots[i].geometry.attributes.position.needsUpdate = true;
-
-            // Ring: move to position AND billboard to camera every frame
-            agentRings[i].position.set(px, py, pz);
-            agentRings[i].quaternion.copy(camera.quaternion);
-
-            // Label: float above dot
-            agentLabels[i].position.set(px, py + 0.28, pz);
-        });
-    }
-
-    tickFly();
     renderer.render(scene, camera);
 }
 
@@ -1107,88 +1138,6 @@ window.addEventListener("resize", () => {
 });
 
 animate();
-
-// ─── Training feed ────────────────────────────────────────────────────────────
-// Connects to the relay WebSocket and renders live training state on the globe.
-// The relay receives pushes from the Modal training container every ~50 episodes.
-let trainingWS = null;
-
-function applyTrainingState(data) {
-    if (!data || data.type === "ping") return;
-
-    // Show the training panel
-    document.getElementById("training-panel").style.display = "block";
-
-    // Update run ID and elapsed
-    const runLabel = `${data.run_id || "--"}  ep ${data.episode || 0}  ${(data.elapsed_min || 0).toFixed(1)}min`;
-    document.getElementById("training-run-id").textContent = runLabel;
-
-    // Update milestone badges
-    const reached = new Set(data.milestones_reached || []);
-    [1,2,3,4].forEach(m => {
-        const el = document.getElementById(`tm${m}`);
-        el.classList.toggle("reached", reached.has(m));
-        const ep = (data.milestone_episodes || {})[m];
-        el.title = reached.has(m) ? `M${m} reached ep${ep}` : `M${m} not yet`;
-    });
-
-    // Update stats text
-    const r = data.reward || {};
-    const rt = data.rates  || {};
-    document.getElementById("training-stats").textContent =
-        `reward ${(r.mean||0) >= 0 ? "+" : ""}${(r.mean||0).toFixed(3)}` +
-        `  [S${(r.survival||0)>=0?"+":""}${(r.survival||0).toFixed(2)} M${(r.mission||0)>=0?"+":""}${(r.mission||0).toFixed(2)}]` +
-        `\neclipse ${(rt.eclipse_idle||0).toFixed(2)}  africa ${(rt.africa_img||0).toFixed(2)}` +
-        `  dl ${(rt.contact_dl||0).toFixed(2)}  yield ${(rt.yield||0).toFixed(3)}`;
-
-    // Normalise agent fields -- handle both old schema (id/battery/storage)
-    // and new schema (norad_id/battery_pct/storage_pct). Modal containers
-    // may be running old code; the frontend must accept both.
-    if (data.agents && data.agents.length > 0) {
-        data.agents = data.agents.map((a, i) => ({
-            norad_id:                 a.norad_id  || a.id  || `IOLA-${i+1}`,
-            name:                     a.name      || a.id  || `IOLA-SAT-${i+1}`,
-            // If no ECI position: place on equatorial orbit at the correct altitude
-            // spaced 120 degrees apart so all three are visible simultaneously.
-            x:  a.x  != null ? a.x  : (6371 + (a.altitude_km||500)) * Math.cos(i * 2.094),
-            y:  a.y  != null ? a.y  : (6371 + (a.altitude_km||500)) * Math.sin(i * 2.094),
-            z:  a.z  != null ? a.z  : 0,
-            vx: a.vx || 0, vy: a.vy || 0, vz: a.vz || 0,
-            altitude_km:              a.altitude_km || 500,
-            mode:                     a.mode || "IDLE",
-            battery_pct:              a.battery_pct  ?? a.battery  ?? 80,
-            storage_pct:              a.storage_pct  ?? a.storage  ?? 0,
-            sunlit:                   a.sunlit ?? true,
-            in_contact_window:        a.in_contact_window ?? false,
-            contact_window_remaining: a.contact_window_remaining ?? 0,
-            episode_reward:           a.episode_reward ?? 0,
-            over_africa:              a.over_africa ?? null,
-            reward_breakdown:         a.reward_breakdown || {survival:0,mission:0,optionality:0,externality:0},
-        }));
-        meshActive = true;
-        applyMeshState(data);
-    }
-}
-
-document.getElementById("training-feed-btn").addEventListener("click", () => {
-    const btn = document.getElementById("training-feed-btn");
-    if (trainingWS) {
-        trainingWS.close(); trainingWS = null;
-        btn.innerText = "TRAINING FEED";
-        document.getElementById("training-panel").style.display = "none";
-        return;
-    }
-    btn.innerText = "CONNECTING…";
-    const ws = new WebSocket(`${WS_BASE}/training/feed`);
-    trainingWS = ws;
-
-    ws.onopen  = () => { btn.innerText = "TRAINING LIVE (click to stop)"; };
-    ws.onmessage = (e) => { try { applyTrainingState(JSON.parse(e.data)); } catch(_) {} };
-    ws.onerror = () => { btn.innerText = "TRAINING FEED (error)"; };
-    ws.onclose = () => {
-        if (trainingWS === ws) { trainingWS = null; btn.innerText = "TRAINING FEED"; }
-    };
-});
 
 </script>
 </body>
