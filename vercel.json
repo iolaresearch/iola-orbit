@@ -1,3 +1,9 @@
 {
-  "outputDirectory": "."
+  "outputDirectory": ".",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "http://iola-v2-alb-1491086923.eu-west-1.elb.amazonaws.com/:path*"
+    }
+  ]
 }
