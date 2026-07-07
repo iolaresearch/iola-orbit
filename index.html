@@ -351,6 +351,10 @@
     <div class="panel">
         <div class="panel-title">CATALOG</div>
         <div class="stat-row"><span class="label">TOTAL</span><span id="satellite-count">—</span></div>
+        <div class="stat-row"><span class="label leo">PAYLOADS</span><span id="payload-count" class="leo">—</span></div>
+        <div class="stat-row"><span class="label" style="color:#ff6666">DEBRIS</span><span id="debris-count" style="color:#ff6666">—</span></div>
+        <div class="stat-row"><span class="label" style="color:#ffaa44">ROCKET B.</span><span id="rb-count" style="color:#ffaa44">—</span></div>
+        <div class="divider"></div>
         <div class="stat-row"><span class="label leo">LEO</span><span id="leo-count" class="leo">—</span></div>
         <div class="stat-row"><span class="label meo">MEO</span><span id="meo-count" class="meo">—</span></div>
         <div class="stat-row"><span class="label geo">GEO</span><span id="geo-count" class="geo">—</span></div>
@@ -704,13 +708,16 @@ function updateTopBarFreshness(propagated_at) {
 }
 
 function updateCatalogHealth(d) {
-    const stats = d.tle_age_stats || {};
-    const med   = stats.median_hours;
-    const dot   = document.getElementById("freshness-dot");
-    const fDot  = document.getElementById("sys-freshness-dot");
-    const fVal  = document.getElementById("sys-freshness-val");
+    const stats   = d.tle_age_stats || {};
+    const types   = d.object_type_counts || {};
+    const orbital = d.orbital_class_counts || {};
+    const med     = stats.median_hours;  // payload median
+    const dot     = document.getElementById("freshness-dot");
+    const fDot    = document.getElementById("sys-freshness-dot");
+    const fVal    = document.getElementById("sys-freshness-val");
     const fStatus = d.freshness_status || "ok";
 
+    // Freshness reflects payload catalog only (debris staleness is expected)
     dot.className = fStatus === "ok" ? "" : fStatus;
     fDot.className = `sys-dot sys-${fStatus === "ok" ? "ok" : fStatus === "aging" ? "warn" : "err"}`;
     fVal.textContent = fStatus.toUpperCase();
@@ -719,12 +726,31 @@ function updateCatalogHealth(d) {
         document.getElementById("tle-age-display").textContent = `${med.toFixed(1)}h`;
     }
     document.getElementById("sys-errors-val").textContent =
-        (d.tle_age_stats?.stale_count != null) ? `${d.tle_age_stats.stale_count} stale` : "—";
+        (stats.stale_count != null) ? `${stats.stale_count} stale (payload)` : "—";
 
-    // Update catalog size
+    // Catalog size = full catalog including debris
     if (d.catalog_size) {
         document.getElementById("top-catalog-size").textContent = d.catalog_size.toLocaleString();
+        // Also update TOTAL in catalog panel
+        const sc = document.getElementById("satellite-count");
+        if (sc) sc.textContent = d.catalog_size.toLocaleString();
     }
+
+    // Object type counts
+    if (types.PAYLOAD != null)
+        document.getElementById("payload-count").textContent = types.PAYLOAD.toLocaleString();
+    if (types.DEBRIS != null)
+        document.getElementById("debris-count").textContent = types.DEBRIS.toLocaleString();
+    if (types["ROCKET BODY"] != null)
+        document.getElementById("rb-count").textContent = types["ROCKET BODY"].toLocaleString();
+
+    // Orbital class counts
+    if (orbital.LEO != null)
+        document.getElementById("leo-count").textContent = orbital.LEO.toLocaleString();
+    if (orbital.MEO != null)
+        document.getElementById("meo-count").textContent = orbital.MEO.toLocaleString();
+    if (orbital.GEO != null)
+        document.getElementById("geo-count").textContent = orbital.GEO.toLocaleString();
 }
 
 function renderShellDensity(data) {
