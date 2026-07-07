@@ -658,8 +658,8 @@ function connectConjStream() {
 async function loadConjunctionsActive() {
     try {
         const r = await fetch(`${API_BASE}/conjunctions/active`);
+        if (r.status === 204) return; // screen still running — nothing to update
         const d = await r.json();
-        // Build same shape as SSE event
         const events = d.conjunctions || [];
         const crit = events.filter(e => e.risk?.risk_level === "CRITICAL");
         const high = events.filter(e => e.risk?.risk_level === "HIGH");
