@@ -1,40 +1,46 @@
 importScripts("https://cdn.jsdelivr.net/npm/satellite.js@4.1.3/dist/satellite.min.js");
 
-let satrecs    = [];
-let meanClasses = [];   // stable orbital class from mean semi-major axis, not instantaneous altitude
-let objectTypes = [];   // 0=PAYLOAD, 1=DEBRIS, 2=ROCKET BODY
+let satrecs     = [];
+let meanClasses = [];
+let objectTypes = [];
 
 // Object type constants
 const OBJ_PAYLOAD = 0;
 const OBJ_DEBRIS  = 1;
 const OBJ_RB      = 2;
 
-// Orbital class constants (same as server-side engine.py)
-const CLS_LEO = 0;
-const CLS_MEO = 1;
-const CLS_GEO = 2;
+// Orbital class constants — 6 regimes (must match LAYER_* arrays in index.html)
+const CLS_VLEO      = 0;   // Very Low Earth Orbit: 160–450 km
+const CLS_LEO       = 1;   // Low Earth Orbit: 450–2,000 km
+const CLS_MEO       = 2;   // Medium Earth Orbit: 2,000–35,486 km, ecc < 0.25
+const CLS_GEO       = 3;   // Geostationary: 35,486–36,100 km band
+const CLS_HEO       = 4;   // Highly Elliptical Orbit: eccentricity ≥ 0.25
+const CLS_GRAVEYARD = 5;   // Disposal/Graveyard: > 36,100 km, ecc < 0.25
 
-// Physical constants for mean semi-major axis computation
-const GM_KM3S2 = 398600.4418;   // Earth gravitational parameter (km³/s²)
-const R_EARTH  = 6371.0;        // Earth mean radius (km)
+// Physical constants
+const GM_KM3S2    = 398600.4418;
+const R_EARTH     = 6371.0;
+const HEO_ECC_MIN = 0.25;    // eccentricity threshold for HEO classification
+const GEO_LOW_KM  = 35486.0; // GEO band lower boundary (35,786 - 300)
+const GEO_HIGH_KM = 36086.0; // GEO band upper boundary (35,786 + 300)
+const MEO_MAX_KM  = GEO_LOW_KM;
+const VLEO_MAX_KM = 450.0;
+const LEO_MAX_KM  = 2000.0;
 
 function parseTLEs(raw) {
-    // Handles both 3LE (name + TLE1 + TLE2, from CelesTrak active payloads)
-    // and 2LE (TLE1 + TLE2 only, from Space-Track debris and rocket bodies).
-    // The catalog combines both because the debris catalog uses 2LE format.
+    // Handles both 3LE (name + TLE1 + TLE2, CelesTrak active payloads)
+    // and 2LE (TLE1 + TLE2, Space-Track debris/rocket bodies).
     const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
     const records = [];
     let i = 0;
     while (i < lines.length - 1) {
         let name, line1, line2;
         if (lines[i].startsWith("1 ")) {
-            // 2LE format: this line IS TLE line 1, next is TLE line 2
-            name  = lines[i].substring(2, 7).trim();  // NORAD ID as name
+            name  = lines[i].substring(2, 7).trim();
             line1 = lines[i];
             line2 = lines[i + 1];
             i += 2;
         } else {
-            // 3LE format: name line followed by the two TLE data lines
             name  = lines[i];
             line1 = lines[i + 1];
             line2 = lines[i + 2];
@@ -51,45 +57,52 @@ function parseTLEs(raw) {
 }
 
 function computeMeanOrbitalClass(satrec) {
-    // Use mean motion (rad/min) to compute mean semi-major axis and stable orbital class.
-    // This avoids HEO debris flickering between LEO and GEO as it moves along its
-    // eccentric orbit — a debris object with apogee at 45,000 km and perigee at 500 km
-    // has a mean semi-major axis in MEO, not GEO.
-    const n_rad_min = satrec.no;  // mean motion (rad/min) from TLE
+    // Classify by mean semi-major axis altitude AND eccentricity.
+    //
+    // Why mean SMA, not instantaneous altitude:
+    //   An HEO satellite (e.g. Molniya, Tundra) has a mean SMA in MEO range
+    //   but instantaneous positions ranging from LEO perigee to beyond-GEO apogee.
+    //   Using instantaneous altitude causes the dot to appear far above GEO while
+    //   colored MEO-blue — visually inconsistent. Using mean SMA + eccentricity
+    //   gives a stable, physically meaningful class.
+    //
+    // Why eccentricity threshold (HEO detection):
+    //   Molniya orbits: ecc ~0.74, SMA ~26,560 km (would be MEO without ecc check)
+    //   Tundra orbits:  ecc ~0.27, SMA ~42,164 km (would be GEO without ecc check)
+    //   ecc ≥ 0.25 correctly captures both.
+
+    const n_rad_min = satrec.no;
     if (!n_rad_min || n_rad_min <= 0) return CLS_LEO;
-    const n_rad_s   = n_rad_min / 60.0;
-    const a_km      = Math.cbrt(GM_KM3S2 / (n_rad_s * n_rad_s));
-    const alt_km    = a_km - R_EARTH;
-    if (alt_km < 2000)  return CLS_LEO;
-    if (alt_km < 35786) return CLS_MEO;
-    return CLS_GEO;
+
+    const ecc     = satrec.ecco || 0;
+    const n_rad_s = n_rad_min / 60.0;
+    const a_km    = Math.cbrt(GM_KM3S2 / (n_rad_s * n_rad_s));
+    const alt_km  = a_km - R_EARTH;
+
+    // HEO takes priority — checked before altitude to correctly capture Molniya/Tundra
+    if (ecc >= HEO_ECC_MIN) return CLS_HEO;
+
+    if (alt_km < VLEO_MAX_KM)  return CLS_VLEO;
+    if (alt_km < LEO_MAX_KM)   return CLS_LEO;
+    if (alt_km < GEO_LOW_KM)   return CLS_MEO;
+    if (alt_km <= GEO_HIGH_KM) return CLS_GEO;
+    return CLS_GRAVEYARD;
 }
 
 function classifyObjectType(name) {
-    // Mirror the exact classification logic from propagate/engine.py object_type field.
+    // Mirrors engine.py object_type classification exactly.
     const n = name.toUpperCase().trim();
-    if (n.endsWith(" DEB") || n.endsWith("DEB") || n.includes("DEBRIS")) {
-        return OBJ_DEBRIS;
-    }
-    if (n.includes(" R/B") || n.endsWith("R/B") || n.includes("ROCKET")) {
-        return OBJ_RB;
-    }
-    // Numeric-only names are Space-Track 2LE entries without a name line — predominantly debris
-    if (/^\d+$/.test(n)) {
-        return OBJ_DEBRIS;
-    }
+    if (n.endsWith(" DEB") || n.endsWith("DEB") || n.includes("DEBRIS")) return OBJ_DEBRIS;
+    if (n.includes(" R/B") || n.endsWith("R/B") || n.includes("ROCKET")) return OBJ_RB;
+    if (/^\d+$/.test(n)) return OBJ_DEBRIS;  // numeric-only = Space-Track 2LE debris
     return OBJ_PAYLOAD;
 }
 
 self.onmessage = (e) => {
     if (e.data.type === "init") {
         satrecs = parseTLEs(e.data.raw);
-
-        // Pre-compute stable orbital class and object type for every object.
-        // These are computed once at init and reused on every propagation frame.
         meanClasses = satrecs.map(r => computeMeanOrbitalClass(r.satrec));
         objectTypes = new Uint8Array(satrecs.map(r => classifyObjectType(r.name)));
-
         self.postMessage({ type: "ready", count: satrecs.length });
         return;
     }
@@ -100,28 +113,22 @@ self.onmessage = (e) => {
         const positions    = new Float32Array(satrecs.length * 3);
         const altitudes    = new Float32Array(satrecs.length);
         const classes      = new Uint8Array(satrecs.length);
-        const objTypesCopy = new Uint8Array(objectTypes);   // transfer-safe copy
+        const objTypesCopy = new Uint8Array(objectTypes);
 
         for (let i = 0; i < satrecs.length; i++) {
             const pv = satellite.propagate(satrecs[i].satrec, now);
             if (!pv || !pv.position) {
-                // Failed propagation (decayed or invalid TLE) — park at origin
-                positions[i * 3] = 0; positions[i * 3 + 1] = 0; positions[i * 3 + 2] = 0;
+                positions[i*3] = 0; positions[i*3+1] = 0; positions[i*3+2] = 0;
                 altitudes[i] = 0;
                 classes[i]   = meanClasses[i];
                 continue;
             }
             const p = pv.position;
-            positions[i * 3]     = p.x / 1000;
-            positions[i * 3 + 1] = p.y / 1000;
-            positions[i * 3 + 2] = p.z / 1000;
-
-            // Instantaneous altitude for the density bars and inspector display
+            positions[i*3]     = p.x / 1000;
+            positions[i*3+1]   = p.y / 1000;
+            positions[i*3+2]   = p.z / 1000;
             altitudes[i] = Math.sqrt(p.x**2 + p.y**2 + p.z**2) - 6371;
-
-            // Stable orbital class from mean semi-major axis (not instantaneous altitude).
-            // Prevents HEO debris from flickering between LEO/GEO as it orbits.
-            classes[i] = meanClasses[i];
+            classes[i]   = meanClasses[i];
         }
 
         self.postMessage(

@@ -351,20 +351,26 @@
     <div class="panel">
         <div class="panel-title">CATALOG</div>
         <div class="stat-row"><span class="label">TOTAL</span><span id="satellite-count">—</span></div>
-        <div class="stat-row"><span class="label leo">PAYLOADS</span><span id="payload-count" class="leo">—</span></div>
-        <div class="stat-row"><span class="label" style="color:#ff6666">DEBRIS</span><span id="debris-count" style="color:#ff6666">—</span></div>
-        <div class="stat-row"><span class="label" style="color:#ffaa44">ROCKET B.</span><span id="rb-count" style="color:#ffaa44">—</span></div>
+        <div class="stat-row"><span class="label" style="color:#aaffaa">PAYLOADS</span><span id="payload-count" style="color:#aaffaa">—</span></div>
+        <div class="stat-row"><span class="label" style="color:#cc2222">DEBRIS</span><span id="debris-count" style="color:#cc2222">—</span></div>
+        <div class="stat-row"><span class="label" style="color:#ff9900">ROCKET B.</span><span id="rb-count" style="color:#ff9900">—</span></div>
         <div class="divider"></div>
-        <div class="stat-row"><span class="label leo">LEO</span><span id="leo-count" class="leo">—</span></div>
-        <div class="stat-row"><span class="label meo">MEO</span><span id="meo-count" class="meo">—</span></div>
+        <div class="stat-row"><span class="label" style="color:#00ff44">VLEO</span><span id="vleo-count" style="color:#00ff44">—</span></div>
+        <div class="stat-row"><span class="label" style="color:#00ffcc">LEO</span><span id="leo-count" style="color:#00ffcc">—</span></div>
+        <div class="stat-row"><span class="label" style="color:#0088ff">MEO</span><span id="meo-count" style="color:#0088ff">—</span></div>
         <div class="stat-row"><span class="label geo">GEO</span><span id="geo-count" class="geo">—</span></div>
+        <div class="stat-row"><span class="label" style="color:#ff00ff">HEO</span><span id="heo-count" style="color:#ff00ff">—</span></div>
+        <div class="stat-row"><span class="label" style="color:#9900cc">GRAVE.</span><span id="grave-count" style="color:#9900cc">—</span></div>
         <div class="divider"></div>
-        <div class="filters">
-            <button class="filter-btn leo active" data-class="0">LEO</button>
-            <button class="filter-btn meo active" data-class="1">MEO</button>
-            <button class="filter-btn geo active" data-class="2">GEO</button>
-            <button class="filter-btn active" data-class="3" style="color:#cc2222;border-color:rgba(204,34,34,0.5)">DEB</button>
-            <button class="filter-btn active" data-class="4" style="color:#ff9900;border-color:rgba(255,153,0,0.5)">R/B</button>
+        <div class="filters" style="flex-wrap:wrap;gap:4px;">
+            <button class="filter-btn active" data-class="0" style="color:#00ff44;border-color:rgba(0,255,68,0.4)">VLEO</button>
+            <button class="filter-btn active" data-class="1" style="color:#00ffcc;border-color:rgba(0,255,204,0.4)">LEO</button>
+            <button class="filter-btn active" data-class="2" style="color:#0088ff;border-color:rgba(0,136,255,0.4)">MEO</button>
+            <button class="filter-btn active" data-class="3" style="color:#ff6600;border-color:rgba(255,102,0,0.4)">GEO</button>
+            <button class="filter-btn active" data-class="4" style="color:#ff00ff;border-color:rgba(255,0,255,0.4)">HEO</button>
+            <button class="filter-btn active" data-class="5" style="color:#9900cc;border-color:rgba(153,0,204,0.4)">GRV</button>
+            <button class="filter-btn active" data-class="6" style="color:#cc2222;border-color:rgba(204,34,34,0.4)">DEB</button>
+            <button class="filter-btn active" data-class="7" style="color:#ff9900;border-color:rgba(255,153,0,0.4)">R/B</button>
         </div>
     </div>
 
@@ -467,16 +473,42 @@ const API_BASE = window.location.hostname === "localhost"
     ? "http://localhost:8000"
     : "/api";
 
-// 5 rendering layers: 0=payload-LEO, 1=payload-MEO, 2=payload-GEO, 3=debris, 4=rocket-body
-// Debris = dark red, Rocket Bodies = amber. Payloads keep existing LEO/MEO/GEO colors.
-const LAYER_COLORS = [0x00ff88, 0x00bbff, 0xff6600, 0xcc2222, 0xff9900];
-const LAYER_NAMES  = ["LEO", "MEO", "GEO", "DEBRIS", "ROCKET B."];
-const LAYER_SIZES  = [0.05, 0.05, 0.05, 0.03, 0.04];   // debris slightly smaller
+// 8 rendering layers for payload objects (6 orbital regimes) + 2 object-type layers.
+// Layer index MUST match worker constants CLS_VLEO(0)…CLS_GRAVEYARD(5), OBJ_DEBRIS→6, OBJ_RB→7
+//
+// Orbital regimes (layers 0–5, payload objects only):
+//   0 VLEO      Very Low Earth Orbit  160–450 km        bright green
+//   1 LEO       Low Earth Orbit       450–2,000 km      cyan
+//   2 MEO       Medium Earth Orbit    2,000–35,486 km   blue
+//   3 GEO       Geostationary         35,486–36,086 km  orange
+//   4 HEO       Highly Elliptical     ecc ≥ 0.25        magenta
+//   5 GRAVEYARD Disposal/graveyard    >36,086 km        purple
+//
+// Object-type layers (layers 6–7, override orbital regime for non-payloads):
+//   6 DEBRIS       dark red
+//   7 ROCKET BODY  amber
+//
+// This design ensures every object has exactly one visual identity:
+//   - Payloads → orbital regime color (stable, based on mean semi-major axis)
+//   - Debris/RB → type color (regardless of orbital regime)
+const LAYER_COLORS = [
+    0x00ff44,   // 0 VLEO      bright green
+    0x00ffcc,   // 1 LEO       cyan
+    0x0088ff,   // 2 MEO       blue
+    0xff6600,   // 3 GEO       orange
+    0xff00ff,   // 4 HEO       magenta
+    0x9900cc,   // 5 GRAVEYARD purple
+    0xcc2222,   // 6 DEBRIS    dark red
+    0xff9900,   // 7 ROCKET B. amber
+];
+const LAYER_NAMES  = ["VLEO", "LEO", "MEO", "GEO", "HEO", "GRAVEYARD", "DEBRIS", "ROCKET B."];
+const LAYER_SIZES  = [0.05, 0.05, 0.05, 0.05, 0.05, 0.04, 0.025, 0.03];
 
 // Legacy aliases used by existing conjunction/inspector code
 const CLASS_COLORS = LAYER_COLORS;
 const CLASS_NAMES  = LAYER_NAMES;
-const COUNT_IDS    = ["leo-count", "meo-count", "geo-count"];  // only first 3 used for display
+
+const N_LAYERS = LAYER_COLORS.length;  // 8
 
 const RISK_COLORS = {
     CRITICAL: 0xff3a3a,
@@ -529,7 +561,7 @@ const starsGeo = new THREE.BufferGeometry();
 starsGeo.setAttribute("position", new THREE.Float32BufferAttribute(starPos, 3));
 scene.add(new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.15 })));
 
-// Satellite point clouds — 5 layers (payload-LEO, payload-MEO, payload-GEO, debris, rocket-body)
+// Satellite point clouds — 8 layers (6 payload orbital regimes + debris + rocket bodies)
 const classGeos = LAYER_COLORS.map(() => new THREE.BufferGeometry());
 const classPts  = classGeos.map((geo, i) => {
     const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: LAYER_COLORS[i], size: LAYER_SIZES[i] }));
@@ -583,38 +615,44 @@ worker.onmessage = (e) => {
     if (e.data.type === "positions") {
         const { positions, altitudes, classes, objectTypes } = e.data;
         pendingProp = false;
-        const layerBufs  = [[], [], [], [], []];   // 5 layers
-        const layerMetas = [[], [], [], [], []];
-        const layerCounts = [0, 0, 0, 0, 0];
+
+        // 8 layers: indices 0–5 are payload orbital regimes, 6=debris, 7=rocket body
+        const layerBufs   = Array.from({length: N_LAYERS}, () => []);
+        const layerMetas  = Array.from({length: N_LAYERS}, () => []);
+        const layerCounts = new Int32Array(N_LAYERS);
 
         for (let i = 0; i < totalCount; i++) {
-            // Determine rendering layer:
-            //   payload (objectType 0) → orbital class (0=LEO, 1=MEO, 2=GEO)
-            //   debris  (objectType 1) → layer 3
-            //   RB      (objectType 2) → layer 4
+            // Route to layer:
+            //   debris (OBJ_DEBRIS=1)      → layer 6
+            //   rocket body (OBJ_RB=2)     → layer 7
+            //   payload (OBJ_PAYLOAD=0)    → orbital class layer 0–5 from worker
             const objType = objectTypes ? objectTypes[i] : 0;
-            const layer   = objType === 1 ? 3 : objType === 2 ? 4 : (classes[i] || 0);
+            const layer   = objType === 1 ? 6 : objType === 2 ? 7 : Math.min(classes[i] || 0, 5);
             layerBufs[layer].push(positions[i*3], positions[i*3+1], positions[i*3+2]);
             layerMetas[layer].push({
                 name:     satMeta[i]?.name,
                 norad_id: satMeta[i]?.norad_id,
                 altitude: altitudes[i],
                 classIdx: layer,
-                objType:  objType,
+                objType,
                 x: positions[i*3], y: positions[i*3+1], z: positions[i*3+2]
             });
             layerCounts[layer]++;
         }
 
-        for (let c = 0; c < 5; c++) {
+        for (let c = 0; c < N_LAYERS; c++) {
             classGeos[c].setAttribute("position", new THREE.BufferAttribute(new Float32Array(layerBufs[c]), 3));
             classGeos[c].attributes.position.needsUpdate = true;
         }
-        // Update payload orbital class counts (layers 0–2) in the catalog panel
-        // The catalog-health endpoint owns the total counts; worker owns the live sub-counts
-        document.getElementById("leo-count").innerText = layerCounts[0].toLocaleString();
-        document.getElementById("meo-count").innerText = layerCounts[1].toLocaleString();
-        document.getElementById("geo-count").innerText = layerCounts[2].toLocaleString();
+
+        // Update live payload orbital class counts in the catalog panel.
+        // Layer mapping: 0=VLEO, 1=LEO, 2=MEO, 3=GEO, 4=HEO, 5=GRAVEYARD
+        document.getElementById("vleo-count").innerText  = layerCounts[0].toLocaleString();
+        document.getElementById("leo-count").innerText   = layerCounts[1].toLocaleString();
+        document.getElementById("meo-count").innerText   = layerCounts[2].toLocaleString();
+        document.getElementById("geo-count").innerText   = layerCounts[3].toLocaleString();
+        document.getElementById("heo-count").innerText   = layerCounts[4].toLocaleString();
+        document.getElementById("grave-count").innerText = layerCounts[5].toLocaleString();
 
         classPts.forEach((_, c) => { classPts[c].userData.metas = layerMetas[c]; });
 
@@ -1068,8 +1106,8 @@ document.getElementById("conj-back").addEventListener("click", () => {
 
 // ── Conjunction arc visualization ─────────────────────────────────────────────
 function getScenePos(norad_id) {
-    // Search all 5 layers (payload-LEO, payload-MEO, payload-GEO, debris, rocket-body)
-    for (let c = 0; c < 5; c++) {
+    // Search all 8 layers
+    for (let c = 0; c < N_LAYERS; c++) {
         const metas = classPts[c].userData.metas;
         if (!metas) continue;
         const m = metas.find(m => m.norad_id === norad_id);
@@ -1255,7 +1293,7 @@ renderer.domElement.addEventListener("click", async (e) => {
     raycaster.setFromCamera(mouse, camera);
     raycaster.params.Points.threshold = camera.position.length() * 0.008;
 
-    for (let c = 0; c < 5; c++) {
+    for (let c = 0; c < N_LAYERS; c++) {
         if (!classPts[c].visible) continue;
         const hits = raycaster.intersectObject(classPts[c]);
         if (hits.length > 0) {
