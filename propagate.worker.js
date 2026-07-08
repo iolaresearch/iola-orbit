@@ -3,13 +3,32 @@ importScripts("https://cdn.jsdelivr.net/npm/satellite.js@4.1.3/dist/satellite.mi
 let satrecs = [];
 
 function parseTLEs(raw) {
+    // Handles both 3LE (name + line1 + line2, from CelesTrak active payloads)
+    // and 2LE (line1 + line2, from Space-Track debris and rocket bodies).
+    // The catalog combines both formats since the debris fetch returns 2LE.
     const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
     const records = [];
-    for (let i = 0; i < lines.length - 2; i += 3) {
-        if (lines[i].startsWith("1 ") || lines[i].startsWith("2 ")) continue;
+    let i = 0;
+    while (i < lines.length - 1) {
+        let name, line1, line2;
+        if (lines[i].startsWith("1 ")) {
+            // 2LE format: current line is TLE line 1, next is line 2
+            name  = lines[i].substring(2, 7).trim();  // use NORAD ID as name
+            line1 = lines[i];
+            line2 = lines[i + 1];
+            i += 2;
+        } else {
+            // 3LE format: current line is name, next two are TLE lines
+            name  = lines[i];
+            line1 = lines[i + 1];
+            line2 = lines[i + 2];
+            i += 3;
+        }
+        if (!line1 || !line2) break;
+        if (!line1.startsWith("1 ") || !line2.startsWith("2 ")) continue;
         try {
-            const satrec = satellite.twoline2satrec(lines[i + 1], lines[i + 2]);
-            records.push({ name: lines[i], norad_id: lines[i + 1].substring(2, 7).trim(), satrec });
+            const satrec = satellite.twoline2satrec(line1, line2);
+            records.push({ name, norad_id: line1.substring(2, 7).trim(), satrec });
         } catch (_) {}
     }
     return records;
