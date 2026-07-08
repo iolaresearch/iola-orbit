@@ -363,6 +363,8 @@
             <button class="filter-btn leo active" data-class="0">LEO</button>
             <button class="filter-btn meo active" data-class="1">MEO</button>
             <button class="filter-btn geo active" data-class="2">GEO</button>
+            <button class="filter-btn active" data-class="3" style="color:#cc2222;border-color:rgba(204,34,34,0.5)">DEB</button>
+            <button class="filter-btn active" data-class="4" style="color:#ff9900;border-color:rgba(255,153,0,0.5)">R/B</button>
         </div>
     </div>
 
@@ -465,9 +467,16 @@ const API_BASE = window.location.hostname === "localhost"
     ? "http://localhost:8000"
     : "/api";
 
-const CLASS_COLORS = [0x00ff88, 0x00bbff, 0xff6600];
-const CLASS_NAMES  = ["LEO", "MEO", "GEO"];
-const COUNT_IDS    = ["leo-count", "meo-count", "geo-count"];
+// 5 rendering layers: 0=payload-LEO, 1=payload-MEO, 2=payload-GEO, 3=debris, 4=rocket-body
+// Debris = dark red, Rocket Bodies = amber. Payloads keep existing LEO/MEO/GEO colors.
+const LAYER_COLORS = [0x00ff88, 0x00bbff, 0xff6600, 0xcc2222, 0xff9900];
+const LAYER_NAMES  = ["LEO", "MEO", "GEO", "DEBRIS", "ROCKET B."];
+const LAYER_SIZES  = [0.05, 0.05, 0.05, 0.03, 0.04];   // debris slightly smaller
+
+// Legacy aliases used by existing conjunction/inspector code
+const CLASS_COLORS = LAYER_COLORS;
+const CLASS_NAMES  = LAYER_NAMES;
+const COUNT_IDS    = ["leo-count", "meo-count", "geo-count"];  // only first 3 used for display
 
 const RISK_COLORS = {
     CRITICAL: 0xff3a3a,
@@ -520,10 +529,10 @@ const starsGeo = new THREE.BufferGeometry();
 starsGeo.setAttribute("position", new THREE.Float32BufferAttribute(starPos, 3));
 scene.add(new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.15 })));
 
-// Satellite point clouds
-const classGeos = CLASS_COLORS.map(() => new THREE.BufferGeometry());
+// Satellite point clouds — 5 layers (payload-LEO, payload-MEO, payload-GEO, debris, rocket-body)
+const classGeos = LAYER_COLORS.map(() => new THREE.BufferGeometry());
 const classPts  = classGeos.map((geo, i) => {
-    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: CLASS_COLORS[i], size: 0.05 }));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: LAYER_COLORS[i], size: LAYER_SIZES[i] }));
     scene.add(pts);
     return pts;
 });
@@ -572,36 +581,70 @@ worker.onmessage = (e) => {
         return;
     }
     if (e.data.type === "positions") {
-        const { positions, altitudes, classes } = e.data;
+        const { positions, altitudes, classes, objectTypes } = e.data;
         pendingProp = false;
-        const classBufs  = [[], [], []];
-        const classMetas = [[], [], []];
-        const classCounts = [0, 0, 0];
+        const layerBufs  = [[], [], [], [], []];   // 5 layers
+        const layerMetas = [[], [], [], [], []];
+        const layerCounts = [0, 0, 0, 0, 0];
+
         for (let i = 0; i < totalCount; i++) {
-            const cls = classes[i];
-            classBufs[cls].push(positions[i*3], positions[i*3+1], positions[i*3+2]);
-            classMetas[cls].push({ name: satMeta[i]?.name, norad_id: satMeta[i]?.norad_id, altitude: altitudes[i], classIdx: cls, x: positions[i*3], y: positions[i*3+1], z: positions[i*3+2] });
-            classCounts[cls]++;
+            // Determine rendering layer:
+            //   payload (objectType 0) → orbital class (0=LEO, 1=MEO, 2=GEO)
+            //   debris  (objectType 1) → layer 3
+            //   RB      (objectType 2) → layer 4
+            const objType = objectTypes ? objectTypes[i] : 0;
+            const layer   = objType === 1 ? 3 : objType === 2 ? 4 : (classes[i] || 0);
+            layerBufs[layer].push(positions[i*3], positions[i*3+1], positions[i*3+2]);
+            layerMetas[layer].push({
+                name:     satMeta[i]?.name,
+                norad_id: satMeta[i]?.norad_id,
+                altitude: altitudes[i],
+                classIdx: layer,
+                objType:  objType,
+                x: positions[i*3], y: positions[i*3+1], z: positions[i*3+2]
+            });
+            layerCounts[layer]++;
         }
-        for (let c = 0; c < 3; c++) {
-            classGeos[c].setAttribute("position", new THREE.BufferAttribute(new Float32Array(classBufs[c]), 3));
+
+        for (let c = 0; c < 5; c++) {
+            classGeos[c].setAttribute("position", new THREE.BufferAttribute(new Float32Array(layerBufs[c]), 3));
             classGeos[c].attributes.position.needsUpdate = true;
-            document.getElementById(COUNT_IDS[c]).innerText = classCounts[c].toLocaleString();
         }
-        classPts.forEach((_, c) => { classPts[c].userData.metas = classMetas[c]; });
+        // Update payload orbital class counts (layers 0–2) in the catalog panel
+        // The catalog-health endpoint owns the total counts; worker owns the live sub-counts
+        document.getElementById("leo-count").innerText = layerCounts[0].toLocaleString();
+        document.getElementById("meo-count").innerText = layerCounts[1].toLocaleString();
+        document.getElementById("geo-count").innerText = layerCounts[2].toLocaleString();
+
+        classPts.forEach((_, c) => { classPts[c].userData.metas = layerMetas[c]; });
 
         // Update conjunction arcs with current positions
         updateConjunctionArcs();
     }
 };
 
-// Load TLEs
+// Load TLEs and build satMeta index.
+// The TLE catalog is a mix of 3LE (name+line1+line2, CelesTrak active payloads)
+// and 2LE (line1+line2, Space-Track debris/rocket bodies). The satMeta array must
+// be built with the same stepping logic as the worker's parseTLEs function so that
+// satMeta[i] correctly corresponds to the i-th satrec in the worker.
 const tleResp = await fetch(`${API_BASE}/tles`);
 const raw = await tleResp.text();
 const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
-for (let i = 0; i < lines.length - 2; i += 3) {
-    if (lines[i].startsWith("1 ") || lines[i].startsWith("2 ")) continue;
-    satMeta.push({ name: lines[i], norad_id: lines[i+1].substring(2,7).trim() });
+let tli = 0;
+while (tli < lines.length - 1) {
+    if (lines[tli].startsWith("1 ")) {
+        // 2LE entry (debris/RB from Space-Track): no name line
+        const norad = lines[tli].substring(2, 7).trim();
+        satMeta.push({ name: norad, norad_id: norad });
+        tli += 2;
+    } else {
+        // 3LE entry (payload from CelesTrak): name + two TLE lines
+        const name  = lines[tli];
+        const norad = lines[tli + 1] ? lines[tli + 1].substring(2, 7).trim() : "";
+        satMeta.push({ name, norad_id: norad });
+        tli += 3;
+    }
 }
 worker.postMessage({ type: "init", raw });
 
@@ -744,13 +787,9 @@ function updateCatalogHealth(d) {
     if (types["ROCKET BODY"] != null)
         document.getElementById("rb-count").textContent = types["ROCKET BODY"].toLocaleString();
 
-    // Orbital class counts
-    if (orbital.LEO != null)
-        document.getElementById("leo-count").textContent = orbital.LEO.toLocaleString();
-    if (orbital.MEO != null)
-        document.getElementById("meo-count").textContent = orbital.MEO.toLocaleString();
-    if (orbital.GEO != null)
-        document.getElementById("geo-count").textContent = orbital.GEO.toLocaleString();
+    // Note: leo-count / meo-count / geo-count are owned by the worker (updates every 250ms).
+    // The worker computes payload-only counts using stable mean semi-major axis classification.
+    // We do not overwrite them here to avoid a backend-vs-worker race condition.
 }
 
 function renderShellDensity(data) {
@@ -1029,7 +1068,8 @@ document.getElementById("conj-back").addEventListener("click", () => {
 
 // ── Conjunction arc visualization ─────────────────────────────────────────────
 function getScenePos(norad_id) {
-    for (let c = 0; c < 3; c++) {
+    // Search all 5 layers (payload-LEO, payload-MEO, payload-GEO, debris, rocket-body)
+    for (let c = 0; c < 5; c++) {
         const metas = classPts[c].userData.metas;
         if (!metas) continue;
         const m = metas.find(m => m.norad_id === norad_id);
@@ -1215,7 +1255,7 @@ renderer.domElement.addEventListener("click", async (e) => {
     raycaster.setFromCamera(mouse, camera);
     raycaster.params.Points.threshold = camera.position.length() * 0.008;
 
-    for (let c = 0; c < 3; c++) {
+    for (let c = 0; c < 5; c++) {
         if (!classPts[c].visible) continue;
         const hits = raycaster.intersectObject(classPts[c]);
         if (hits.length > 0) {
