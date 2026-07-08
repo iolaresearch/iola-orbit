@@ -941,18 +941,7 @@ function updateConjFeed(data) {
         const empty = document.createElement("div");
         empty.className = "conj-event";
         empty.style.cssText += "text-align:center;padding:20px 14px;";
-        const hasCounts = (summary.CRITICAL || 0) + (summary.HIGH || 0) > 0;
-        if (hasCounts) {
-            // Summary restored from S3 — counts are real, full event list arrives on next screener push
-            empty.innerHTML = `
-                <div style="color:rgba(255,140,0,0.7);font-size:8px;font-weight:700;letter-spacing:0.15em;margin-bottom:6px;">EVENT LIST UPDATING</div>
-                <div style="color:rgba(255,255,255,0.2);font-size:9px;line-height:1.8;">
-                    Counts confirmed from last screen.<br>
-                    Full event list arrives on next screener cycle.
-                </div>`;
-        } else {
-            empty.innerHTML = `<div style="color:rgba(255,255,255,0.2);font-size:9px;">No CRITICAL or HIGH events in current screen</div>`;
-        }
+        empty.innerHTML = `<div style="color:rgba(255,255,255,0.2);font-size:9px;">No CRITICAL or HIGH events in current screen</div>`;
         list.appendChild(empty);
         return;
     }
