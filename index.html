@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <link rel="stylesheet" href="./styles.css">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23000000'/%3E%3Cimage href='./iola-logo-space.png' x='4' y='4' width='24' height='24' clip-path='url(%23c)'/%3E%3CclipPath id='c'%3E%3Ccircle cx='16' cy='16' r='12'/%3E%3C/clipPath%3E%3C/svg%3E">
-    <title>IOLA Orbit — Orbital Intelligence</title>
+    <title>Ikirere Orbit — Orbital Intelligence</title>
     <script type="importmap">
     {
     "imports": {
@@ -74,14 +74,18 @@
     .filters { display: flex; gap: 5px; }
     .filter-btn {
         flex: 1; padding: 5px 0;
-        border: 1px solid rgba(255,255,255,0.1); border-radius: 3px;
-        background: transparent; color: rgba(255,255,255,0.25);
+        border: 1px solid rgba(255,255,255,0.07); border-radius: 3px;
+        background: transparent; color: rgba(255,255,255,0.15);
         font-family: inherit; font-size: 8px; letter-spacing: 0.08em;
         cursor: pointer; transition: all 0.15s;
+        opacity: 0.4;
     }
-    .filter-btn.active.leo { border-color: #00ff88; color: #00ff88; }
-    .filter-btn.active.meo { border-color: #00bbff; color: #00bbff; }
-    .filter-btn.active.geo { border-color: #ff6600; color: #ff6600; }
+    .filter-btn.active {
+        opacity: 1.0;
+    }
+    /* Per-layer active colors — inline style on each button sets the colour;
+       the .active class controls opacity so inactive = visually dimmed */
+    .filter-btn:hover { opacity: 0.7; }
 
     /* ── Shell density bar ───────────────────────────────────────────────────── */
     .density-bands { display: flex; flex-direction: column; gap: 2px; }
@@ -295,7 +299,7 @@
 
 <!-- ── Top bar ─────────────────────────────────────────────────────────────── -->
 <div id="top-bar">
-    <div class="wordmark">IOLA ORBIT</div>
+    <div class="wordmark">IKIRERE ORBIT</div>
 
     <!-- IOLA Propagation badge -->
     <div class="algo-badge" id="prop-badge">
@@ -336,10 +340,10 @@
               title="Time since last satellite position update from the propagation engine.">—</span>
     </div>
     <div class="top-stat" style="margin-left:0;">
-        <span class="lbl">TLE</span>
-        <!-- median TLE age from catalog-health (updated every 5min) -->
+        <span class="lbl">TLE FETCH</span>
+        <!-- fetch age from /health — how long since we last pulled from CelesTrak/Space-Track -->
         <span class="val" id="tle-age-display"
-              title="Median age of orbital element data across the active catalog.">—</span>
+              title="Time since last TLE catalog fetch from CelesTrak and Space-Track. Refreshes every 2.5 hours.">—</span>
     </div>
     <span id="utc-clock">—</span>
 </div>
@@ -363,14 +367,14 @@
         <div class="stat-row"><span class="label" style="color:#9900cc">GRAVE.</span><span id="grave-count" style="color:#9900cc">—</span></div>
         <div class="divider"></div>
         <div class="filters" style="flex-wrap:wrap;gap:4px;">
-            <button class="filter-btn active" data-class="0" style="color:#00ff44;border-color:rgba(0,255,68,0.4)">VLEO</button>
-            <button class="filter-btn active" data-class="1" style="color:#00ffcc;border-color:rgba(0,255,204,0.4)">LEO</button>
-            <button class="filter-btn active" data-class="2" style="color:#0088ff;border-color:rgba(0,136,255,0.4)">MEO</button>
-            <button class="filter-btn active" data-class="3" style="color:#ff6600;border-color:rgba(255,102,0,0.4)">GEO</button>
-            <button class="filter-btn active" data-class="4" style="color:#ff00ff;border-color:rgba(255,0,255,0.4)">HEO</button>
-            <button class="filter-btn active" data-class="5" style="color:#9900cc;border-color:rgba(153,0,204,0.4)">GRV</button>
-            <button class="filter-btn active" data-class="6" style="color:#cc2222;border-color:rgba(204,34,34,0.4)">DEB</button>
-            <button class="filter-btn active" data-class="7" style="color:#ff9900;border-color:rgba(255,153,0,0.4)">R/B</button>
+            <button class="filter-btn active" data-class="0" style="color:#00ff44;border-color:rgba(0,255,68,0.5)">VLEO</button>
+            <button class="filter-btn active" data-class="1" style="color:#00ffcc;border-color:rgba(0,255,204,0.5)">LEO</button>
+            <button class="filter-btn active" data-class="2" style="color:#0088ff;border-color:rgba(0,136,255,0.5)">MEO</button>
+            <button class="filter-btn active" data-class="3" style="color:#ff6600;border-color:rgba(255,102,0,0.5)">GEO</button>
+            <button class="filter-btn active" data-class="4" style="color:#ff00ff;border-color:rgba(255,0,255,0.5)">HEO</button>
+            <button class="filter-btn active" data-class="5" style="color:#9900cc;border-color:rgba(153,0,204,0.5)">GRV</button>
+            <button class="filter-btn" data-class="6" style="color:#cc2222;border-color:rgba(204,34,34,0.5)">DEB</button>
+            <button class="filter-btn" data-class="7" style="color:#ff9900;border-color:rgba(255,153,0,0.5)">R/B</button>
         </div>
     </div>
 
@@ -427,9 +431,15 @@
                 <span class="tier-badge tier-HIGH">— HIGH</span>
                 <span class="tier-badge tier-MODERATE">— MOD</span>
             </div>
-            <div class="feed-age" id="feed-age">Loading…</div>
+            <div class="feed-age" id="feed-age">Connecting…</div>
         </div>
-        <div id="conj-list"></div>
+        <div id="conj-list">
+            <div id="conj-loading" style="text-align:center;padding:20px 14px;color:rgba(255,255,255,0.25);font-size:9px;letter-spacing:0.1em;line-height:1.8;">
+                <div style="margin-bottom:6px;color:rgba(255,140,0,0.7);font-size:8px;font-weight:700;letter-spacing:0.15em;">SCREENING IN PROGRESS</div>
+                Hourly conjunction screen running on dedicated compute.<br>
+                Results load automatically when ready.
+            </div>
+        </div>
     </div>
 
     <!-- Conjunction inspector (shown on event click) -->
@@ -635,6 +645,7 @@ worker.onmessage = (e) => {
                 altitude: altitudes[i],
                 classIdx: layer,
                 objType,
+                // positions buffer is already in scene units (km/1000) — store as-is
                 x: positions[i*3], y: positions[i*3+1], z: positions[i*3+2]
             });
             layerCounts[layer]++;
@@ -739,7 +750,12 @@ function connectConjStream() {
 async function loadConjunctionsActive() {
     try {
         const r = await fetch(`${API_BASE}/conjunctions/active`);
-        if (r.status === 204) return; // screen still running — nothing to update
+        if (r.status === 204) {
+            // Screener still running — update status but keep loading message visible
+            const retryAfter = r.headers.get("Retry-After") || "30";
+            document.getElementById("feed-age").textContent = `Screening in progress — retry in ${retryAfter}s`;
+            return;
+        }
         const d = await r.json();
         const events = d.conjunctions || [];
         const crit = events.filter(e => e.risk?.risk_level === "CRITICAL");
@@ -756,6 +772,26 @@ async function loadCatalogHealth() {
     } catch(e) { console.warn("catalog-health:", e); }
 }
 
+async function loadSystemHealth() {
+    try {
+        const r = await fetch(`${API_BASE}/health`);
+        const d = await r.json();
+        // Update TLE fetch age in top bar — this is when we last pulled from CelesTrak,
+        // distinct from how old the orbital element data is (that's set by Space-Track).
+        const fetchAge = d.fetch_age_hours;
+        const ageEl = document.getElementById("tle-age-display");
+        const dot   = document.getElementById("freshness-dot");
+        if (fetchAge != null) {
+            ageEl.textContent = fetchAge < 1 ? `${Math.round(fetchAge*60)}m ago` : `${fetchAge.toFixed(1)}h ago`;
+            // Also update freshness dot from fetch age
+            const fs = d.freshness || "ok";
+            dot.className = fs === "ok" ? "" : fs;
+        } else {
+            ageEl.textContent = "Fetching…";
+        }
+    } catch(e) { console.warn("health:", e); }
+}
+
 async function loadShellDensity() {
     try {
         const r = await fetch(`${API_BASE}/shell-density`);
@@ -767,10 +803,12 @@ async function loadShellDensity() {
 loadConjunctionsActive();
 loadCatalogHealth();
 loadShellDensity();
-// Refresh every 90 seconds
+loadSystemHealth();
+// Refresh intervals
 setInterval(loadConjunctionsActive, 90000);
 setInterval(loadCatalogHealth, 300000);
 setInterval(loadShellDensity, 300000);
+setInterval(loadSystemHealth, 120000);  // every 2 min — tracks 2.5h fetch cycle
 
 // Also try SSE (may not work on all backends)
 connectSatStream();
@@ -803,9 +841,7 @@ function updateCatalogHealth(d) {
     fDot.className = `sys-dot sys-${fStatus === "ok" ? "ok" : fStatus === "aging" ? "warn" : "err"}`;
     fVal.textContent = fStatus.toUpperCase();
 
-    if (med != null) {
-        document.getElementById("tle-age-display").textContent = `${med.toFixed(1)}h`;
-    }
+    // tle-age-display is now owned by loadSystemHealth (shows fetch age, not TLE epoch age)
     document.getElementById("sys-errors-val").textContent =
         (stats.stale_count != null) ? `${stats.stale_count} stale (payload)` : "—";
 
@@ -892,6 +928,10 @@ function updateConjFeed(data) {
         const ageMin = Math.round((Date.now() - new Date(data.screened_at).getTime()) / 60000);
         document.getElementById("feed-age").textContent = `Updated ${ageMin}m ago`;
     }
+
+    // Clear loading placeholder now that we have real data
+    const loadingEl = document.getElementById("conj-loading");
+    if (loadingEl) loadingEl.remove();
 
     // Event rows
     const list = document.getElementById("conj-list");
@@ -1106,12 +1146,12 @@ document.getElementById("conj-back").addEventListener("click", () => {
 
 // ── Conjunction arc visualization ─────────────────────────────────────────────
 function getScenePos(norad_id) {
-    // Search all 8 layers
+    // Search all 8 layers. meta.x/y/z are already in scene units (divided by 1000 in worker).
     for (let c = 0; c < N_LAYERS; c++) {
         const metas = classPts[c].userData.metas;
         if (!metas) continue;
         const m = metas.find(m => m.norad_id === norad_id);
-        if (m) return new THREE.Vector3(m.x/1000, m.y/1000, m.z/1000);
+        if (m) return new THREE.Vector3(m.x, m.y, m.z);
     }
     return null;
 }
@@ -1398,10 +1438,13 @@ function renderSatGrid(rows) {
 }
 
 // ── Filters & controls ────────────────────────────────────────────────────────
+// Sync initial visibility from DOM state (DEB/RB start inactive = hidden)
 document.querySelectorAll(".filter-btn").forEach(btn => {
+    const layerIdx = parseInt(btn.dataset.class);
+    classPts[layerIdx].visible = btn.classList.contains("active");
     btn.addEventListener("click", () => {
         btn.classList.toggle("active");
-        classPts[parseInt(btn.dataset.class)].visible = btn.classList.contains("active");
+        classPts[layerIdx].visible = btn.classList.contains("active");
     });
 });
 

@@ -124,9 +124,15 @@ self.onmessage = (e) => {
                 continue;
             }
             const p = pv.position;
-            positions[i*3]     = p.x / 1000;
-            positions[i*3+1]   = p.y / 1000;
-            positions[i*3+2]   = p.z / 1000;
+            // ECI → Three.js y-up remap (same remap applied to Sun in index.html).
+            // ECI: x = vernal equinox, y = 90° east equatorial, z = North Pole
+            // Three.js globe: y = North Pole (up), z = out of screen
+            // Without this remap satellites orbit in the x-y plane; Earth rotates in
+            // the x-z plane — they are perpendicular and GEO satellites race across
+            // the globe instead of remaining stationary above their longitude.
+            positions[i*3]   =  p.x / 1000;
+            positions[i*3+1] =  p.z / 1000;
+            positions[i*3+2] = -p.y / 1000;
             altitudes[i] = Math.sqrt(p.x**2 + p.y**2 + p.z**2) - 6371;
             classes[i]   = meanClasses[i];
         }
