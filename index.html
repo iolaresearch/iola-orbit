@@ -1345,6 +1345,8 @@ function updateConjunctionArcs() {
 }
 
 // ── Conjunction pair highlight on globe ───────────────────────────────────────
+// Meshes are updated every frame to follow the satellites as they move.
+// _norad is stored on each mesh so updateHighlightPulse() can look up current pos.
 let highlightMeshes = [];
 
 function clearConjHighlight() {
@@ -1364,23 +1366,22 @@ function highlightConjPair(ev) {
         const pos = getScenePos(norad);
         if (!pos) return;
 
-        // Outer pulsing ring — scales via CSS animation approximated in JS
         const geo  = new THREE.SphereGeometry(0.018, 12, 12);
         const mat  = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.copy(pos);
         mesh._pulseStart = Date.now();
-        mesh._baseScale  = 1.0;
+        mesh._norad      = norad;   // stored so position can be updated each frame
         scene.add(mesh);
         highlightMeshes.push(mesh);
 
-        // Outer glow ring
         const ringGeo = new THREE.SphereGeometry(0.032, 12, 12);
         const ringMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, wireframe: true });
         const ring    = new THREE.Mesh(ringGeo, ringMat);
         ring.position.copy(pos);
         ring._pulseStart = Date.now() + 300;
         ring._isRing     = true;
+        ring._norad      = norad;   // follow the satellite
         scene.add(ring);
         highlightMeshes.push(ring);
     });
@@ -1432,11 +1433,19 @@ function flyToConjunctionPair(ev) {
     highlightConjPair(ev);
 }
 
-// Pulse update — called inside animate()
+// Pulse update — called inside animate() every frame.
+// Also updates mesh positions to follow the satellite's live propagated location.
 function updateHighlightPulse() {
     const now = Date.now();
     highlightMeshes.forEach(m => {
-        const t = ((now - m._pulseStart) % 1200) / 1200; // 1.2s cycle
+        // Follow the satellite — look up its current position from the live index
+        if (m._norad) {
+            const meta = _noradPosIndex[m._norad];
+            if (meta) m.position.set(meta.x, meta.y, meta.z);
+        }
+
+        // Pulse animation
+        const t = ((now - m._pulseStart) % 1200) / 1200;
         const s = m._isRing
             ? 1.0 + Math.sin(t * Math.PI) * 0.6
             : 1.0 + Math.sin(t * Math.PI) * 0.35;
