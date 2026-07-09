@@ -126,7 +126,26 @@
         backdrop-filter: blur(12px);
     }
     .feed-title { font-size: 8px; letter-spacing: 0.2em; color: rgba(255,255,255,0.25); margin-bottom: 6px; }
-    .feed-summary { display: flex; gap: 8px; }
+    .feed-summary { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    /* Arc layer toggle buttons inside feed header */
+    .arc-toggle {
+        font-size: 7px; letter-spacing: 0.08em; padding: 2px 6px;
+        border-radius: 2px; font-weight: 700; cursor: pointer;
+        background: transparent; font-family: inherit;
+        transition: opacity 0.15s;
+    }
+    .arc-toggle.arc-CRITICAL { color: #ff3a3a; border: 1px solid rgba(255,58,58,0.4); }
+    .arc-toggle.arc-HIGH     { color: #ff8c00; border: 1px solid rgba(255,140,0,0.3); }
+    .arc-toggle.arc-off      { opacity: 0.3; }
+    /* Locate button inside accordion */
+    .locate-btn {
+        margin-top: 8px; width: 100%; padding: 6px 0;
+        background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 3px; color: rgba(255,255,255,0.7);
+        font-family: inherit; font-size: 8px; letter-spacing: 0.14em;
+        cursor: pointer; transition: background 0.15s;
+    }
+    .locate-btn:hover { background: rgba(255,255,255,0.1); }
     .tier-badge {
         font-size: 8px; letter-spacing: 0.06em; padding: 2px 6px;
         border-radius: 2px; font-weight: 700;
@@ -431,6 +450,11 @@
                 <span class="tier-badge tier-HIGH">— HIGH</span>
                 <span class="tier-badge tier-MODERATE">— MOD</span>
             </div>
+            <div style="display:flex;gap:5px;margin-top:6px;align-items:center;">
+                <span style="font-size:7px;color:rgba(255,255,255,0.2);letter-spacing:0.1em;">ARCS</span>
+                <button class="arc-toggle arc-CRITICAL active" id="arc-toggle-critical">CRITICAL</button>
+                <button class="arc-toggle arc-HIGH arc-off"    id="arc-toggle-high">HIGH</button>
+            </div>
             <div class="feed-age" id="feed-age">Connecting…</div>
         </div>
         <div id="conj-list">
@@ -606,9 +630,12 @@ let pendingProp  = false;
 let simTimeMs    = Date.now();
 let lastRealMs   = Date.now();
 
-let conjEvents      = [];    // latest conjunction feed
+let conjEvents      = [];    // latest conjunction feed — live events only (past TCA filtered)
 let selectedConjKey = null;  // "norA_norB" of selected event
 let selectedSatNor  = null;  // NORAD of selected satellite
+
+// Arc layer visibility — toggled by ARCS buttons in feed header
+const arcVisible = { CRITICAL: true, HIGH: false };
 
 // ── Client-side SGP4 worker ───────────────────────────────────────────────────
 const worker = new Worker("./propagate.worker.js");
@@ -730,10 +757,9 @@ function connectConjStream() {
     src.addEventListener("conjunction_update", e => {
         try {
             const d = JSON.parse(e.data);
-            const all = [...(d.critical || []), ...(d.high || [])];
-            if (all.length > 0 || conjEvents.length === 0) {
-                // Only replace feed if we have data
-            }
+            // Filter past-TCA from SSE stream too
+            d.critical = (d.critical || []).filter(ev => !isTcaPast(ev));
+            d.high     = (d.high     || []).filter(ev => !isTcaPast(ev));
             updateConjFeed(d);
         } catch(_) {}
     });
@@ -747,21 +773,28 @@ function connectConjStream() {
 }
 
 // ── Polling fallback: load conjunctions/active ────────────────────────────────
+function isTcaPast(ev) {
+    // Returns true if the Time of Closest Approach has already occurred.
+    if (ev.tca_utc) return new Date(ev.tca_utc) < new Date();
+    if (ev.tca_seconds_from_now != null) return ev.tca_seconds_from_now < 0;
+    return false;
+}
+
 async function loadConjunctionsActive() {
     try {
         const r = await fetch(`${API_BASE}/conjunctions/active`);
         if (r.status === 204) {
-            // Screener still running — update status but keep loading message visible
             const retryAfter = r.headers.get("Retry-After") || "30";
             document.getElementById("feed-age").textContent = `Screening in progress — retry in ${retryAfter}s`;
             return;
         }
         const d = await r.json();
-        const events = d.conjunctions || [];
-        const crit = events.filter(e => e.risk?.risk_level === "CRITICAL");
-        const high = events.filter(e => e.risk?.risk_level === "HIGH");
+        // Filter out past-TCA events — they are no longer actionable
+        const liveEvents = (d.conjunctions || []).filter(e => !isTcaPast(e));
+        const crit = liveEvents.filter(e => e.risk?.risk_level === "CRITICAL");
+        const high = liveEvents.filter(e => e.risk?.risk_level === "HIGH");
         updateConjFeed({ screened_at: d.screened_at, summary: d.summary, critical: crit, high: high, total_active: d.conjunctions_found });
-        conjEvents = events;
+        conjEvents = liveEvents;
     } catch(e) { console.warn("conjunctions/active:", e); }
 }
 
@@ -1168,42 +1201,49 @@ function getScenePos(norad_id) {
 }
 
 // ── Conjunction arc visualization ─────────────────────────────────────────────
-// Only CRITICAL arcs are drawn (186 lines, not 2,698).
-// HIGH arcs (2,528) are omitted — they dominate the visual and cause GPU stall
-// when all 2,528 geometries are updated every 250ms.
-// The right panel feed shows all CRITICAL+HIGH events; arcs are for spatial context only.
-const ARC_POSITIONS = new Float32Array(2 * 3);  // reused buffer for 2-point lines
+// Arcs only drawn for events where TCA is within 6 hours — at that point both
+// satellites are close enough in space that a connecting line is meaningful.
+// Beyond 6h the two objects can be on opposite hemispheres; the line through
+// Earth is misleading. The 6h window also aligns with operational urgency.
+const ARC_TCA_WINDOW_S = 6 * 3600;  // 6 hours in seconds
+
+function _tcaSecondsFromNow(ev) {
+    if (ev.tca_utc) return (new Date(ev.tca_utc) - Date.now()) / 1000;
+    if (ev.tca_seconds_from_now != null) return ev.tca_seconds_from_now;
+    return Infinity;
+}
 
 function updateConjunctionArcs() {
-    // Rebuild NORAD index from current frame's positions (O(n) once per frame)
     rebuildNoradIndex();
-
-    // Hide all existing arcs
     Object.values(conjArcLines).forEach(l => { l.visible = false; });
 
-    // Draw CRITICAL arcs only — keeps GPU load bounded (~186 lines)
     for (let i = 0; i < conjEvents.length; i++) {
         const ev   = conjEvents[i];
         const tier = ev.risk?.risk_level;
-        if (tier !== "CRITICAL") continue;
+
+        // Respect arc layer toggles
+        if (tier === "CRITICAL" && !arcVisible.CRITICAL) continue;
+        if (tier === "HIGH"     && !arcVisible.HIGH)     continue;
+        if (tier !== "CRITICAL" && tier !== "HIGH")      continue;
+
+        // Only draw arc when TCA is imminent — avoids lines cutting through Earth
+        const tcaSecs = _tcaSecondsFromNow(ev);
+        if (tcaSecs < 0 || tcaSecs > ARC_TCA_WINDOW_S) continue;
 
         const mA = _noradPosIndex[ev.object_1_norad];
         const mB = _noradPosIndex[ev.object_2_norad];
         if (!mA || !mB) continue;
 
         const key = `${ev.object_1_norad}_${ev.object_2_norad}`;
-
         if (!conjArcLines[key]) {
-            // Create line with pre-allocated BufferGeometry — never recreated
             const geo = new THREE.BufferGeometry();
-            const buf = new Float32Array(6);  // 2 points × 3 components
-            geo.setAttribute("position", new THREE.BufferAttribute(buf, 3));
-            const line = new THREE.Line(geo, ARC_MAT_CRITICAL.clone());
+            geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
+            const mat  = tier === "CRITICAL" ? ARC_MAT_CRITICAL.clone() : ARC_MAT_HIGH.clone();
+            const line = new THREE.Line(geo, mat);
             scene.add(line);
             conjArcLines[key] = line;
         }
 
-        // Update position buffer in-place — no geometry disposal/recreation
         const attr = conjArcLines[key].geometry.attributes.position;
         attr.array[0] = mA.x; attr.array[1] = mA.y; attr.array[2] = mA.z;
         attr.array[3] = mB.x; attr.array[4] = mB.y; attr.array[5] = mB.z;
@@ -1252,6 +1292,52 @@ function highlightConjPair(ev) {
         scene.add(ring);
         highlightMeshes.push(ring);
     });
+}
+
+// ── Camera fly-to: midpoint between two conjunction satellites ─────────────────
+function flyToConjunctionPair(ev) {
+    // Rebuild index in case positions are fresh
+    rebuildNoradIndex();
+    const mA = _noradPosIndex[ev.object_1_norad];
+    const mB = _noradPosIndex[ev.object_2_norad];
+    if (!mA && !mB) return;
+
+    // Use whichever positions are available
+    const ax = mA ? mA.x : (mB ? mB.x : 0);
+    const ay = mA ? mA.y : (mB ? mB.y : 0);
+    const az = mA ? mA.z : (mB ? mB.z : 0);
+    const bx = mB ? mB.x : ax;
+    const by = mB ? mB.y : ay;
+    const bz = mB ? mB.z : az;
+
+    // Midpoint between the two satellites
+    const mx = (ax + bx) / 2;
+    const my = (ay + by) / 2;
+    const mz = (az + bz) / 2;
+
+    // Target the midpoint — pull camera out to a comfortable viewing distance
+    const mid = new THREE.Vector3(mx, my, mz);
+    const dist = Math.max(mid.length() * 1.6, 10);  // keep above Earth surface
+
+    // Animate over 800ms: interpolate camera position toward the target
+    const startPos = camera.position.clone();
+    const endPos   = mid.clone().normalize().multiplyScalar(dist);
+    const startTarget = controls.target.clone();
+    const t0 = Date.now();
+    const dur = 800;
+
+    function animFly() {
+        const t = Math.min((Date.now() - t0) / dur, 1);
+        const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;  // ease-in-out
+        camera.position.lerpVectors(startPos, endPos, ease);
+        controls.target.lerpVectors(startTarget, mid, ease);
+        controls.update();
+        if (t < 1) requestAnimationFrame(animFly);
+    }
+    animFly();
+
+    // Highlight the pair on the globe
+    highlightConjPair(ev);
 }
 
 // Pulse update — called inside animate()
@@ -1349,6 +1435,16 @@ function buildAccordionContent(container, ev) {
     ab.className = "action-banner";
     ab.innerHTML = `<div class="action-label">RECOMMENDED ACTION</div><div class="action-text action-${action}">${actionStr}</div>`;
     container.appendChild(ab);
+
+    // Locate button — flies camera to midpoint between the two satellites
+    const locBtn = document.createElement("button");
+    locBtn.className = "locate-btn";
+    locBtn.textContent = "⊕  LOCATE ON GLOBE";
+    locBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        flyToConjunctionPair(ev);
+    });
+    container.appendChild(locBtn);
 }
 
 // ── Satellite click inspector ─────────────────────────────────────────────────
@@ -1474,6 +1570,16 @@ document.querySelectorAll(".filter-btn").forEach(btn => {
         btn.classList.toggle("active");
         classPts[layerIdx].visible = btn.classList.contains("active");
     });
+});
+
+// ── Arc layer toggles ─────────────────────────────────────────────────────────
+document.getElementById("arc-toggle-critical").addEventListener("click", function() {
+    arcVisible.CRITICAL = !arcVisible.CRITICAL;
+    this.classList.toggle("arc-off", !arcVisible.CRITICAL);
+});
+document.getElementById("arc-toggle-high").addEventListener("click", function() {
+    arcVisible.HIGH = !arcVisible.HIGH;
+    this.classList.toggle("arc-off", !arcVisible.HIGH);
 });
 
 // Pause removed — was used for IkirereMesh training only
