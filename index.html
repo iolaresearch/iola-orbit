@@ -49,8 +49,12 @@
     #left-panel {
         position: absolute; top: 54px; left: 16px; z-index: 100;
         width: 196px;
+        max-height: calc(100vh - 70px);
+        overflow-y: auto;
         display: flex; flex-direction: column; gap: 8px;
     }
+    #left-panel::-webkit-scrollbar { width: 2px; }
+    #left-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
     .panel {
         background: rgba(0,0,0,0.68);
         border: 1px solid rgba(255,255,255,0.08);
@@ -901,18 +905,32 @@ async function loadSystemHealth() {
     try {
         const r = await fetch(`${API_BASE}/health`);
         const d = await r.json();
-        // Update TLE fetch age in top bar — this is when we last pulled from CelesTrak,
-        // distinct from how old the orbital element data is (that's set by Space-Track).
-        const fetchAge = d.fetch_age_hours;
-        const ageEl = document.getElementById("tle-age-display");
-        const dot   = document.getElementById("freshness-dot");
-        if (fetchAge != null) {
-            ageEl.textContent = fetchAge < 1 ? `${Math.round(fetchAge*60)}m ago` : `${fetchAge.toFixed(1)}h ago`;
-            // Also update freshness dot from fetch age
+        const fetchAge  = d.fetch_age_hours;
+        const fetchedAt = d.last_fetched_at;
+        const ageEl     = document.getElementById("tle-age-display");
+        const dot       = document.getElementById("freshness-dot");
+        const fVal      = document.getElementById("sys-freshness-val");
+        const fDot      = document.getElementById("sys-freshness-dot");
+
+        if (fetchedAt != null && fetchAge != null) {
+            // Live fetch has happened — show how long ago
+            ageEl.textContent = fetchAge < 1
+                ? `${Math.round(fetchAge*60)}m ago`
+                : `${fetchAge.toFixed(1)}h ago`;
             const fs = d.freshness || "ok";
             dot.className = fs === "ok" ? "" : fs;
+            if (fVal) {
+                fVal.textContent = fs.toUpperCase();
+                if (fDot) fDot.className = `sys-dot sys-${fs === "ok" ? "ok" : fs === "aging" ? "warn" : "err"}`;
+            }
         } else {
+            // Catalog seeded from S3 archive — no live fetch yet
             ageEl.textContent = "Fetching…";
+            dot.className = "aging";
+            if (fVal) {
+                fVal.textContent = "S3 SEED";
+                if (fDot) fDot.className = "sys-dot sys-warn";
+            }
         }
     } catch(e) { console.warn("health:", e); }
 }
