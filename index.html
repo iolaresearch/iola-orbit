@@ -365,9 +365,9 @@
         <span class="algo-info" title="Real-time orbital propagation using live orbital element data. Continuously calculates spacecraft positions and future trajectories across the active catalog.">ⓘ</span>
     </div>
 
-    <!-- Catalog count — attached to propagation -->
+    <!-- Tracked object count — attached to propagation -->
     <div class="top-stat">
-        <span class="lbl">CATALOG</span>
+        <span class="lbl" title="Total objects tracked in real time: active payloads, debris, and rocket bodies.">TRACKED OBJECTS</span>
         <span class="val" id="top-catalog-size">—</span>
     </div>
 
@@ -404,9 +404,9 @@
 <!-- ── Left panel ─────────────────────────────────────────────────────────── -->
 <div id="left-panel">
 
-    <!-- Catalog stats -->
+    <!-- Tracked Objects stats -->
     <div class="panel">
-        <div class="panel-title">CATALOG</div>
+        <div class="panel-title">TRACKED OBJECTS</div>
         <div class="stat-row"><span class="label">TOTAL</span><span id="satellite-count">—</span></div>
         <div class="stat-row"><span class="label" style="color:#aaffaa">PAYLOADS</span><span id="payload-count" style="color:#aaffaa">—</span></div>
         <div class="stat-row"><span class="label" style="color:#cc2222">DEBRIS</span><span id="debris-count" style="color:#cc2222">—</span></div>
@@ -1008,12 +1008,14 @@ function updateCatalogHealth(d) {
     const fStatus = d.freshness_status || "ok";
     dot.className = fStatus === "ok" ? "" : fStatus;
 
-    // DATA QUALITY — percentage of payload catalog with fresh orbital data (epoch ≤ 24h)
+    // DATA QUALITY — percentage of objects with orbital data ≤ 24h old.
+    // fresh = ≤8h, aging = 8-24h — both are operationally valid for conjunction screening.
+    // stale = >24h — older data, not wrong, just less precise for fast-moving LEO objects.
     const total   = (stats.fresh_count || 0) + (stats.aging_count || 0) + (stats.stale_count || 0);
-    const fresh   = (stats.fresh_count || 0) + (stats.aging_count || 0);
-    const qualPct = total > 0 ? ((fresh / total) * 100).toFixed(2) : null;
+    const within24h = (stats.fresh_count || 0) + (stats.aging_count || 0);
+    const qualPct   = total > 0 ? ((within24h / total) * 100).toFixed(1) : null;
     document.getElementById("sys-errors-val").textContent =
-        qualPct != null ? `${qualPct}% accurate` : "—";
+        qualPct != null ? `${qualPct}% within 24h` : "—";
 
     // Catalog size = full catalog including debris
     if (d.catalog_size) {
