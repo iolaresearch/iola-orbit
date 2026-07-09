@@ -1143,44 +1143,73 @@ document.getElementById("conj-back").addEventListener("click", () => {
     document.querySelectorAll(".conj-event").forEach(r => r.classList.remove("selected"));
 });
 
-// ── Conjunction arc visualization ─────────────────────────────────────────────
-function getScenePos(norad_id) {
-    // Search all 8 layers. meta.x/y/z are already in scene units (divided by 1000 in worker).
+// ── NORAD → scene position index (rebuilt each propagation frame) ─────────────
+// Replaces O(n) linear search through all metas per arc endpoint.
+// With 2,698 arcs × 2 endpoints × 4 frames/s = 21,584 searches/s previously.
+// Now: one pass to build the map, then O(1) per lookup.
+let _noradPosIndex = {};   // norad_id → {x, y, z} in scene units
+
+function rebuildNoradIndex() {
+    _noradPosIndex = {};
     for (let c = 0; c < N_LAYERS; c++) {
         const metas = classPts[c].userData.metas;
         if (!metas) continue;
-        const m = metas.find(m => m.norad_id === norad_id);
-        if (m) return new THREE.Vector3(m.x, m.y, m.z);
+        for (let i = 0; i < metas.length; i++) {
+            const m = metas[i];
+            if (m && m.norad_id) _noradPosIndex[m.norad_id] = m;
+        }
     }
-    return null;
 }
 
+function getScenePos(norad_id) {
+    const m = _noradPosIndex[norad_id];
+    if (!m) return null;
+    return new THREE.Vector3(m.x, m.y, m.z);
+}
+
+// ── Conjunction arc visualization ─────────────────────────────────────────────
+// Only CRITICAL arcs are drawn (186 lines, not 2,698).
+// HIGH arcs (2,528) are omitted — they dominate the visual and cause GPU stall
+// when all 2,528 geometries are updated every 250ms.
+// The right panel feed shows all CRITICAL+HIGH events; arcs are for spatial context only.
+const ARC_POSITIONS = new Float32Array(2 * 3);  // reused buffer for 2-point lines
+
 function updateConjunctionArcs() {
-    // Hide all arcs
+    // Rebuild NORAD index from current frame's positions (O(n) once per frame)
+    rebuildNoradIndex();
+
+    // Hide all existing arcs
     Object.values(conjArcLines).forEach(l => { l.visible = false; });
 
-    conjEvents.forEach(ev => {
+    // Draw CRITICAL arcs only — keeps GPU load bounded (~186 lines)
+    for (let i = 0; i < conjEvents.length; i++) {
+        const ev   = conjEvents[i];
         const tier = ev.risk?.risk_level;
-        if (!["CRITICAL","HIGH"].includes(tier)) return;
+        if (tier !== "CRITICAL") continue;
 
-        const posA = getScenePos(ev.object_1_norad);
-        const posB = getScenePos(ev.object_2_norad);
-        if (!posA || !posB) return;
+        const mA = _noradPosIndex[ev.object_1_norad];
+        const mB = _noradPosIndex[ev.object_2_norad];
+        if (!mA || !mB) continue;
 
         const key = `${ev.object_1_norad}_${ev.object_2_norad}`;
+
         if (!conjArcLines[key]) {
-            const mat = tier === "CRITICAL" ? ARC_MAT_CRITICAL.clone() : ARC_MAT_HIGH.clone();
-            const line = new THREE.Line(new THREE.BufferGeometry(), mat);
+            // Create line with pre-allocated BufferGeometry — never recreated
+            const geo = new THREE.BufferGeometry();
+            const buf = new Float32Array(6);  // 2 points × 3 components
+            geo.setAttribute("position", new THREE.BufferAttribute(buf, 3));
+            const line = new THREE.Line(geo, ARC_MAT_CRITICAL.clone());
             scene.add(line);
             conjArcLines[key] = line;
         }
 
-        // Draw straight line between the two positions (geodesic arc approximation)
-        const pts = [posA, posB];
-        conjArcLines[key].geometry.dispose();
-        conjArcLines[key].geometry = new THREE.BufferGeometry().setFromPoints(pts);
+        // Update position buffer in-place — no geometry disposal/recreation
+        const attr = conjArcLines[key].geometry.attributes.position;
+        attr.array[0] = mA.x; attr.array[1] = mA.y; attr.array[2] = mA.z;
+        attr.array[3] = mB.x; attr.array[4] = mB.y; attr.array[5] = mB.z;
+        attr.needsUpdate = true;
         conjArcLines[key].visible = true;
-    });
+    }
 }
 
 // ── Conjunction pair highlight on globe ───────────────────────────────────────
