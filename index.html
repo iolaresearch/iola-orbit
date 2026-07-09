@@ -729,8 +729,12 @@ worker.onmessage = (e) => {
     if (e.data.type === "ready") {
         workerReady = true;
         totalCount  = e.data.count;
+        // Set initial count from worker, then immediately fetch authoritative counts
+        // from catalog-health which has exact payload/debris/RB breakdown.
+        // This corrects any stale TLE count (e.g. after a debris-doubling incident).
         document.getElementById("satellite-count").innerText = totalCount;
         document.getElementById("top-catalog-size").innerText = totalCount.toLocaleString();
+        loadCatalogHealth();  // overrides with server-authoritative counts
         if (!paused) worker.postMessage({ type: "propagate" });
         return;
     }
