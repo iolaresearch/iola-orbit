@@ -396,12 +396,8 @@
         <span class="val" id="live-data-age"
               title="Time since last satellite position update from the propagation engine.">—</span>
     </div>
-    <div class="top-stat" style="margin-left:0;">
-        <span class="lbl">TLE FETCH</span>
-        <!-- fetch age from /health — how long since we last pulled from CelesTrak/Space-Track -->
-        <span class="val" id="tle-age-display"
-              title="Time since last TLE catalog fetch from CelesTrak and Space-Track. Refreshes every 2.5 hours.">—</span>
-    </div>
+    <!-- tle-age-display retained as hidden — used internally by loadSystemHealth() -->
+    <span id="tle-age-display" style="display:none"></span>
     <span id="utc-clock">—</span>
 </div>
 
@@ -447,21 +443,21 @@
     <div class="panel">
         <div class="panel-title">SYSTEM STATUS</div>
         <div class="sys-row">
-            <span class="sys-lbl">COLLECTION</span>
+            <span class="sys-lbl">PIPELINE STATUS</span>
             <div style="display:flex;align-items:center;gap:5px;">
                 <div class="sys-dot sys-ok" id="sys-collection-dot"></div>
                 <span class="sys-val" id="sys-collection-val">—</span>
             </div>
         </div>
         <div class="sys-row">
-            <span class="sys-lbl">FRESHNESS</span>
+            <span class="sys-lbl">LAST UPDATE</span>
             <div style="display:flex;align-items:center;gap:5px;">
                 <div class="sys-dot sys-ok" id="sys-freshness-dot"></div>
                 <span class="sys-val" id="sys-freshness-val">—</span>
             </div>
         </div>
         <div class="sys-row">
-            <span class="sys-lbl">STALE TLEs</span>
+            <span class="sys-lbl">DATA QUALITY</span>
             <span class="sys-val" id="sys-errors-val">—</span>
         </div>
     </div>
@@ -901,37 +897,51 @@ async function loadCatalogHealth() {
     }
 }
 
+function _formatAge(ts) {
+    // Format a UTC timestamp string as a human age: "4m ago", "2.1h ago", "3d ago"
+    if (!ts) return "—";
+    try {
+        const diffMs = Date.now() - new Date(ts).getTime();
+        const diffMin = diffMs / 60000;
+        if (diffMin < 60)  return `${Math.round(diffMin)}m ago`;
+        if (diffMin < 1440) return `${(diffMin/60).toFixed(1)}h ago`;
+        return `${(diffMin/1440).toFixed(1)}d ago`;
+    } catch(_) { return "—"; }
+}
+
 async function loadSystemHealth() {
     try {
         const r = await fetch(`${API_BASE}/health`);
         const d = await r.json();
-        const fetchAge  = d.fetch_age_hours;
-        const fetchedAt = d.last_fetched_at;
-        const ageEl     = document.getElementById("tle-age-display");
-        const dot       = document.getElementById("freshness-dot");
-        const fVal      = document.getElementById("sys-freshness-val");
-        const fDot      = document.getElementById("sys-freshness-dot");
+        // tle-age-display is hidden — updated silently for internal use
+        const ageEl = document.getElementById("tle-age-display");
+        const fVal  = document.getElementById("sys-freshness-val");
+        const fDot  = document.getElementById("sys-freshness-dot");
 
-        if (fetchedAt != null && fetchAge != null) {
-            // Live fetch has happened — show how long ago
-            ageEl.textContent = fetchAge < 1
-                ? `${Math.round(fetchAge*60)}m ago`
-                : `${fetchAge.toFixed(1)}h ago`;
-            const fs = d.freshness || "ok";
-            dot.className = fs === "ok" ? "" : fs;
-            if (fVal) {
-                fVal.textContent = fs.toUpperCase();
-                if (fDot) fDot.className = `sys-dot sys-${fs === "ok" ? "ok" : fs === "aging" ? "warn" : "err"}`;
-            }
-        } else {
-            // Catalog seeded from S3 archive — no live fetch yet
-            ageEl.textContent = "Fetching…";
-            dot.className = "aging";
-            if (fVal) {
-                fVal.textContent = "S3 SEED";
-                if (fDot) fDot.className = "sys-dot sys-warn";
-            }
+        // LAST UPDATE: show age of the most recent conjunction screen.
+        // If screened_at is available from the conjunction feed, that is the
+        // primary source (threat picture age). Falls back to fetch age.
+        const screenedAt = window._lastScreenedAt || null;
+        const fetchedAt  = d.last_fetched_at || null;
+        const refTime    = screenedAt || fetchedAt;
+
+        if (fVal) fVal.textContent = refTime ? _formatAge(refTime) : (d.last_fetched_at ? "Fetching…" : "S3 SEED");
+
+        // Dot color based on age: green <2h, amber <6h, red ≥6h or null
+        if (fDot) {
+            const ageH = refTime ? (Date.now() - new Date(refTime).getTime()) / 3600000 : 99;
+            fDot.className = `sys-dot ${ageH < 2 ? "sys-ok" : ageH < 6 ? "sys-warn" : "sys-err"}`;
         }
+
+        // Top-bar freshness dot from health freshness field
+        const dot = document.getElementById("freshness-dot");
+        const fs  = d.freshness || "ok";
+        dot.className = (d.last_fetched_at == null) ? "aging" : (fs === "ok" ? "" : fs);
+
+        if (ageEl) ageEl.textContent = d.fetch_age_hours != null
+            ? _formatAge(d.last_fetched_at)
+            : "Fetching…";
+
     } catch(e) { console.warn("health:", e); }
 }
 
@@ -973,20 +983,37 @@ function updateCatalogHealth(d) {
     const stats   = d.tle_age_stats || {};
     const types   = d.object_type_counts || {};
     const orbital = d.orbital_class_counts || {};
-    const med     = stats.median_hours;  // payload median
     const dot     = document.getElementById("freshness-dot");
-    const fDot    = document.getElementById("sys-freshness-dot");
-    const fVal    = document.getElementById("sys-freshness-val");
+
+    // PIPELINE STATUS — green if catalog loaded and conjunction cache has events,
+    // amber if catalog loaded but conjunction not yet populated, red if degraded
+    const catalogOk     = (d.catalog_size || 0) > 1000;
+    const conjOk        = (window._lastConjCount || 0) > 0;
+    const pipelineDot   = document.getElementById("sys-collection-dot");
+    const pipelineVal   = document.getElementById("sys-collection-val");
+    if (!catalogOk) {
+        pipelineDot.className = "sys-dot sys-err";
+        pipelineVal.textContent = "DEGRADED";
+    } else if (!conjOk) {
+        pipelineDot.className = "sys-dot sys-warn";
+        pipelineVal.textContent = "SCREENING";
+    } else {
+        pipelineDot.className = "sys-dot sys-ok";
+        pipelineVal.textContent = "NOMINAL";
+    }
+
+    // LAST UPDATE — age of the conjunction screen result (how fresh the threat picture is)
+    // Owned by updateConjFeed() which sets window._lastScreenedAt on each update.
+    // Falls back to freshness_status-based dot coloring for the top bar.
     const fStatus = d.freshness_status || "ok";
-
-    // Freshness reflects payload catalog only (debris staleness is expected)
     dot.className = fStatus === "ok" ? "" : fStatus;
-    fDot.className = `sys-dot sys-${fStatus === "ok" ? "ok" : fStatus === "aging" ? "warn" : "err"}`;
-    fVal.textContent = fStatus.toUpperCase();
 
-    // tle-age-display is now owned by loadSystemHealth (shows fetch age, not TLE epoch age)
+    // DATA QUALITY — percentage of payload catalog with fresh orbital data (epoch ≤ 24h)
+    const total   = (stats.fresh_count || 0) + (stats.aging_count || 0) + (stats.stale_count || 0);
+    const fresh   = (stats.fresh_count || 0) + (stats.aging_count || 0);
+    const qualPct = total > 0 ? ((fresh / total) * 100).toFixed(2) : null;
     document.getElementById("sys-errors-val").textContent =
-        (stats.stale_count != null) ? `${stats.stale_count} stale (payload)` : "—";
+        qualPct != null ? `${qualPct}% accurate` : "—";
 
     // Catalog size = full catalog including debris
     if (d.catalog_size) {
@@ -1050,6 +1077,10 @@ function renderShellDensity(data) {
 function updateConjFeed(data) {
     const events = [...(data.critical || []), ...(data.high || [])];
     conjEvents = events;
+
+    // Store globals used by PIPELINE STATUS and LAST UPDATE panels
+    window._lastConjCount  = data.total_active ?? events.length;
+    window._lastScreenedAt = data.screened_at || null;
 
     // Top bar
     const summary = data.summary || {};
