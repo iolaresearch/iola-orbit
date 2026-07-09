@@ -312,6 +312,40 @@
         position: relative;
     }
     .algo-info:hover { color: rgba(255,255,255,0.7); }
+
+    /* ── Toast notifications ─────────────────────────────────────────────────── */
+    #toast-container {
+        position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+        display: flex; flex-direction: column-reverse; gap: 6px;
+        pointer-events: none;
+    }
+    .toast {
+        background: rgba(0,0,0,0.85);
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 4px; padding: 9px 12px;
+        backdrop-filter: blur(12px);
+        font-family: inherit; font-size: 8px; letter-spacing: 0.08em;
+        display: flex; align-items: center; gap: 8px;
+        min-width: 200px; max-width: 280px;
+        pointer-events: all; cursor: pointer;
+        animation: toastIn 0.22s ease;
+        transition: opacity 0.3s, transform 0.3s;
+    }
+    .toast.toast-out { opacity: 0; transform: translateX(12px); }
+    .toast-icon { flex-shrink: 0; font-size: 10px; }
+    .toast-msg  { flex: 1; color: rgba(255,255,255,0.85); line-height: 1.5; }
+    .toast-info    { border-left: 3px solid rgba(255,255,255,0.4); }
+    .toast-info    .toast-icon { color: rgba(255,255,255,0.6); }
+    .toast-warning { border-left: 3px solid #ffcc00; }
+    .toast-warning .toast-icon { color: #ffcc00; }
+    .toast-error   { border-left: 3px solid #ff3a3a; }
+    .toast-error   .toast-icon { color: #ff3a3a; }
+    .toast-success { border-left: 3px solid #00ff88; }
+    .toast-success .toast-icon { color: #00ff88; }
+    @keyframes toastIn {
+        from { opacity: 0; transform: translateX(16px); }
+        to   { opacity: 1; transform: none; }
+    }
     </style>
 </head>
 <body>
@@ -497,10 +531,61 @@
 <!-- ── Watermark ───────────────────────────────────────────────────────────── -->
 <img id="watermark" src="./iola-logo-space.png" alt="IOLA">
 
+<!-- ── Toast container ────────────────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
 <script type="module">
 
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
+
+// ── Toast notification system ─────────────────────────────────────────────────
+// showToast(message, type)
+//   type: 'info' | 'warning' | 'error' | 'success'
+//   Auto-dismisses after 4s. Max 4 visible at once (oldest removed).
+(function() {
+    const ICONS    = { info: 'ⓘ', warning: '⚠', error: '✕', success: '✓' };
+    const MAX      = 4;
+    const DURATION = 4000;
+    const _queue   = [];  // active toast elements
+
+    function _dismiss(el) {
+        if (!el.parentNode) return;
+        el.classList.add("toast-out");
+        setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 320);
+        const idx = _queue.indexOf(el);
+        if (idx !== -1) _queue.splice(idx, 1);
+    }
+
+    window.showToast = function(message, type) {
+        if (!type || !ICONS[type]) type = "info";
+
+        // Enforce max — dismiss oldest
+        while (_queue.length >= MAX) _dismiss(_queue[0]);
+
+        const container = document.getElementById("toast-container");
+        if (!container) return;
+
+        const el = document.createElement("div");
+        el.className = `toast toast-${type}`;
+
+        const icon = document.createElement("span");
+        icon.className = "toast-icon";
+        icon.textContent = ICONS[type];
+
+        const msg = document.createElement("span");
+        msg.className = "toast-msg";
+        msg.textContent = message;
+
+        el.append(icon, msg);
+        el.addEventListener("click", () => _dismiss(el));
+        container.appendChild(el);
+        _queue.push(el);
+
+        const timer = setTimeout(() => _dismiss(el), DURATION);
+        el.addEventListener("click", () => clearTimeout(timer), { once: true });
+    };
+})();
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 const API_BASE = window.location.hostname === "localhost"
@@ -786,6 +871,7 @@ async function loadConjunctionsActive() {
         if (r.status === 204) {
             const retryAfter = r.headers.get("Retry-After") || "30";
             document.getElementById("feed-age").textContent = `Screening in progress — retry in ${retryAfter}s`;
+            showToast("Screening in progress…", "info");
             return;
         }
         const d = await r.json();
@@ -795,14 +881,20 @@ async function loadConjunctionsActive() {
         const high = liveEvents.filter(e => e.risk?.risk_level === "HIGH");
         updateConjFeed({ screened_at: d.screened_at, summary: d.summary, critical: crit, high: high, total_active: d.conjunctions_found });
         conjEvents = liveEvents;
-    } catch(e) { console.warn("conjunctions/active:", e); }
+        showToast(`Conjunction data updated — ${d.conjunctions_found ?? liveEvents.length} events`, "success");
+    } catch(e) {
+        console.warn("conjunctions/active:", e);
+    }
 }
 
 async function loadCatalogHealth() {
     try {
         const r = await fetch(`${API_BASE}/catalog-health`);
         updateCatalogHealth(await r.json());
-    } catch(e) { console.warn("catalog-health:", e); }
+    } catch(e) {
+        console.warn("catalog-health:", e);
+        showToast("Catalog health unavailable", "warning");
+    }
 }
 
 async function loadSystemHealth() {
@@ -1472,11 +1564,13 @@ renderer.domElement.addEventListener("click", async (e) => {
                 const sat = await r.json();
                 if (sat.error) {
                     showSatInspectorBasic(meta);
+                    showToast("Satellite data unavailable", "warning");
                 } else {
                     showSatInspectorFull(sat);
                 }
             } catch(_) {
                 showSatInspectorBasic(meta);
+                showToast("Satellite data unavailable", "warning");
             }
             return;
         }
