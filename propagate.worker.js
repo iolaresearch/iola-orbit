@@ -59,8 +59,14 @@ function computeMeanOrbitalClass(satrec) {
     return CLS_GRAVEYARD;
 }
 
-function classifyObjectType(name) {
-    // Mirrors engine.py object_type classification exactly.
+function classifyObjectType(name, objectType) {
+    // Use authoritative OBJECT_TYPE from Space-Track OMM when available.
+    // This field is present on all Space-Track debris/RB records and is exact.
+    // Name-pattern fallback is only used for legacy or CelesTrak-only records.
+    if (objectType === "DEBRIS")       return OBJ_DEBRIS;
+    if (objectType === "ROCKET BODY")  return OBJ_RB;
+    if (objectType === "PAYLOAD")      return OBJ_PAYLOAD;
+    // Fallback: name-pattern inference
     const n = name.toUpperCase().trim();
     if (n.endsWith(" DEB") || n.endsWith("DEB") || n.includes("DEBRIS")) return OBJ_DEBRIS;
     if (n.includes(" R/B") || n.endsWith("R/B") || n.includes("ROCKET")) return OBJ_RB;
@@ -73,7 +79,7 @@ self.onmessage = (e) => {
         // e.data.records is an array of OMM JSON objects from /catalog
         satrecs     = parseOMM(e.data.records);
         meanClasses = satrecs.map(r => computeMeanOrbitalClass(r.satrec));
-        objectTypes = new Uint8Array(satrecs.map(r => classifyObjectType(r.name)));
+        objectTypes = new Uint8Array(satrecs.map((r, i) => classifyObjectType(r.name, e.data.records[i]?.OBJECT_TYPE || "")));
         self.postMessage({ type: "ready", count: satrecs.length });
         return;
     }
