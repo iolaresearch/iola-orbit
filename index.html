@@ -788,30 +788,20 @@ worker.onmessage = (e) => {
     }
 };
 
-// Load TLEs and build satMeta index.
-// The TLE catalog is a mix of 3LE (name+line1+line2, CelesTrak active payloads)
-// and 2LE (line1+line2, Space-Track debris/rocket bodies). The satMeta array must
-// be built with the same stepping logic as the worker's parseTLEs function so that
-// satMeta[i] correctly corresponds to the i-th satrec in the worker.
-const tleResp = await fetch(`${API_BASE}/tles`);
-const raw = await tleResp.text();
-const lines = raw.split("\n").map(l => l.trim()).filter(Boolean);
-let tli = 0;
-while (tli < lines.length - 1) {
-    if (lines[tli].startsWith("1 ")) {
-        // 2LE entry (debris/RB from Space-Track): no name line
-        const norad = lines[tli].substring(2, 7).trim();
-        satMeta.push({ name: norad, norad_id: norad });
-        tli += 2;
-    } else {
-        // 3LE entry (payload from CelesTrak): name + two TLE lines
-        const name  = lines[tli];
-        const norad = lines[tli + 1] ? lines[tli + 1].substring(2, 7).trim() : "";
-        satMeta.push({ name, norad_id: norad });
-        tli += 3;
-    }
+// Load OMM/GP catalog from /catalog endpoint (replaces TLE text /tles).
+// CelesTrak deprecated TLE format 2026-07-11 (NORAD 5-digit limit exceeded).
+// /catalog returns a JSON array of OMM records — 6-digit NORAD IDs supported.
+// satMeta[i] must correspond to the i-th satrec built by the worker's parseOMM().
+// Both iterate the same records array in the same order — alignment guaranteed.
+const catResp = await fetch(`${API_BASE}/catalog`);
+const records = await catResp.json();
+for (const omm of records) {
+    if (!omm || omm.NORAD_CAT_ID === undefined) continue;
+    const norad = String(omm.NORAD_CAT_ID);
+    const name  = omm.OBJECT_NAME || norad;
+    satMeta.push({ name, norad_id: norad });
 }
-worker.postMessage({ type: "init", raw });
+worker.postMessage({ type: "init", records });
 
 // Propagation loop
 setInterval(() => {
