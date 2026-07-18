@@ -1,4 +1,4 @@
-importScripts("https://cdn.jsdelivr.net/npm/satellite.js@7.0.1/dist/satellite.min.js");
+importScripts("https://cdn.jsdelivr.net/npm/satellite.js@6.0.2/dist/satellite.min.js");
 
 let satrecs     = [];
 let meanClasses = [];
